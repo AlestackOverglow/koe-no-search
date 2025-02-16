@@ -17,8 +17,8 @@ import (
 )
 
 var (
-	pattern         string
-	extension       string
+	patterns        []string
+	extensions      []string
 	ignoreCase      bool
 	workers         int
 	bufferSize      int
@@ -66,8 +66,8 @@ func main() {
 		Use:   "filesearch [directories...]",
 		Short: "Fast file search utility",
 		Long: `A high-performance file search utility with advanced features.
-Supports pattern matching, file extensions, and concurrent processing.
-Example: filesearch -p "*.txt" -i /home /usr`,
+Supports multiple patterns and extensions for searching.
+Example: filesearch -p "*.txt" -p "*.doc" -e txt -e doc -i /home /usr`,
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			if workers <= 0 {
@@ -96,8 +96,8 @@ Example: filesearch -p "*.txt" -i /home /usr`,
 
 			opts := search.SearchOptions{
 				RootDirs:   args,
-				Pattern:    pattern,
-				Extension:  extension,
+				Patterns:   patterns,
+				Extensions: extensions,
 				MaxWorkers: workers,
 				IgnoreCase: ignoreCase,
 				BufferSize: bufferSize,
@@ -146,8 +146,8 @@ Example: filesearch -p "*.txt" -i /home /usr`,
 		},
 	}
 
-	rootCmd.Flags().StringVarP(&pattern, "pattern", "p", "", "Search pattern")
-	rootCmd.Flags().StringVarP(&extension, "ext", "e", "", "File extension")
+	rootCmd.Flags().StringSliceVarP(&patterns, "pattern", "p", []string{}, "Search patterns (can be specified multiple times)")
+	rootCmd.Flags().StringSliceVarP(&extensions, "ext", "e", []string{}, "File extensions without dot (can be specified multiple times)")
 	rootCmd.Flags().BoolVarP(&ignoreCase, "ignore-case", "i", false, "Ignore case")
 	rootCmd.Flags().IntVarP(&workers, "workers", "w", 0, "Number of worker threads (default: number of CPU cores)")
 	rootCmd.Flags().IntVarP(&bufferSize, "buffer", "b", 1000, "Size of the internal buffers")

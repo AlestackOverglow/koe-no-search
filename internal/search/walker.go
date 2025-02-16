@@ -6,21 +6,39 @@ import (
 	"strings"
 )
 
-// walkDirectoryOptimized processes a directory and its subdirectories with optimizations
-func walkDirectoryOptimized(dir string, paths chan<- string, opts SearchOptions) {
-	logDebug("Starting directory walk: %s", dir)
-	
-	// Skip hidden directories
+// shouldSkipDirectory checks if the directory should be skipped
+func shouldSkipDirectory(dir string, opts SearchOptions) bool {
+	// Skip hidden directories if configured
 	if opts.ExcludeHidden {
 		base := filepath.Base(dir)
 		if strings.HasPrefix(base, ".") {
 			logDebug("Skipping hidden directory: %s", dir)
-			return
+			return true
 		}
 	}
 
+	// Skip system directories
 	if skipDirs[filepath.Base(dir)] {
 		logDebug("Skipping excluded directory: %s", dir)
+		return true
+	}
+
+	// Skip user-specified directories
+	for _, excludeDir := range opts.ExcludeDirs {
+		if strings.HasPrefix(dir, excludeDir) {
+			logDebug("Skipping user-excluded directory: %s", dir)
+			return true
+		}
+	}
+
+	return false
+}
+
+// walkDirectoryOptimized processes a directory and its subdirectories with optimizations
+func walkDirectoryOptimized(dir string, paths chan<- string, opts SearchOptions) {
+	logDebug("Starting directory walk: %s", dir)
+	
+	if shouldSkipDirectory(dir, opts) {
 		return
 	}
 
@@ -39,11 +57,7 @@ func walkDirectoryOptimized(dir string, paths chan<- string, opts SearchOptions)
 			path := filepath.Join(dir, entry.Name())
 			
 			if entry.IsDir() {
-				if !skipDirs[entry.Name()] {
-					walkDirectoryOptimized(path, paths, opts)
-				} else {
-					logDebug("Skipping excluded subdirectory: %s", path)
-				}
+				walkDirectoryOptimized(path, paths, opts)
 			} else {
 				if shouldProcessFile(path, opts) {
 					select {

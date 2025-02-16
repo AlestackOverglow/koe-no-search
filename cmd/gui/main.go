@@ -29,38 +29,63 @@ type FileListItem struct {
 func ShowInExplorer(path string) {
 	path = filepath.Clean(path)
 	
+	// Validate path
+	if _, err := os.Stat(path); err != nil {
+		search.LogError("File no longer exists or inaccessible: %v", err)
+		dialog.ShowError(fmt.Errorf("File no longer exists or inaccessible: %v", err), nil)
+		return
+	}
+
+	// Get absolute path
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		search.LogError("Failed to get absolute path: %v", err)
+		dialog.ShowError(fmt.Errorf("Failed to get file path: %v", err), nil)
+		return
+	}
+
+	// Check if path is accessible
+	if _, err := os.Stat(absPath); err != nil {
+		search.LogError("Path is not accessible: %v", err)
+		dialog.ShowError(fmt.Errorf("Path is not accessible: %v", err), nil)
+		return
+	}
+
 	switch runtime.GOOS {
 	case "windows":
 		// Use explorer.exe directly
 		explorerPath := "explorer.exe"
 		if windir := os.Getenv("WINDIR"); windir != "" {
 			explorerPath = filepath.Join(windir, "explorer.exe")
+			if _, err := os.Stat(explorerPath); err != nil {
+				explorerPath = "explorer.exe" // Fallback to PATH
+			}
 		}
-		
-		// Get absolute path to the file
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			search.LogError("Failed to get absolute path: %v", err)
-			dialog.ShowError(fmt.Errorf("Failed to get file path: %v", err), nil)
-			return
-		}
-		
-		// Launch explorer with /select parameter
+
+		// Try to open file with selection first
 		cmd := exec.Command(explorerPath, "/select,", absPath)
 		if err := cmd.Run(); err != nil {
-			search.LogError("Failed to open in explorer: %v", err)
-			dialog.ShowError(fmt.Errorf("Failed to open in explorer: %v", err), nil)
+			search.LogWarning("Failed to open file with selection, trying to open directory: %v", err)
+			
+			// If selection fails, try to open the directory
+			dirPath := filepath.Dir(absPath)
+			cmd = exec.Command(explorerPath, dirPath)
+			if err := cmd.Run(); err != nil {
+				search.LogError("Failed to open directory in explorer: %v", err)
+				dialog.ShowError(fmt.Errorf("Failed to open in explorer: %v", err), nil)
+			}
 		}
 		
 	case "darwin":
-		cmd := exec.Command("open", "-R", path)
+		cmd := exec.Command("open", "-R", absPath)
 		if err := cmd.Run(); err != nil {
 			search.LogError("Failed to open in Finder: %v", err)
 			dialog.ShowError(fmt.Errorf("Failed to open in Finder: %v", err), nil)
 		}
 		
 	default: // Linux and other Unix-like systems
-		cmd := exec.Command("xdg-open", filepath.Dir(path))
+		dirPath := filepath.Dir(absPath)
+		cmd := exec.Command("xdg-open", dirPath)
 		if err := cmd.Run(); err != nil {
 			search.LogError("Failed to open in file manager: %v", err)
 			dialog.ShowError(fmt.Errorf("Failed to open in file manager: %v", err), nil)
@@ -96,10 +121,26 @@ func main() {
 	
 	// Create input fields
 	patternEntry := widget.NewEntry()
-	patternEntry.SetPlaceHolder("Search pattern")
+	patternEntry.SetPlaceHolder("Search patterns (comma-separated, e.g.: *.txt, *.doc)")
 	
 	extensionEntry := widget.NewEntry()
-	extensionEntry.SetPlaceHolder("File extension (e.g., .txt)")
+	extensionEntry.SetPlaceHolder("File extensions (comma-separated, e.g.: txt, doc)")
+	
+	// Helper function to split comma-separated values
+	splitCommaList := func(s string) []string {
+		if s == "" {
+			return nil
+		}
+		parts := strings.Split(s, ",")
+		result := make([]string, 0, len(parts))
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				result = append(result, p)
+			}
+		}
+		return result
+	}
 	
 	ignoreCaseCheck := widget.NewCheck("Ignore case", nil)
 	
@@ -200,119 +241,145 @@ func main() {
 		updateDirsLabel()
 	})
 	
+	// File operations frame
+	fileOpFrame := widget.NewCard("File Operations", "", nil)
+	
+	// Operation type selection
+	opTypeSelect := widget.NewSelect([]string{
+		"No Operation",
+		"Copy Files",
+		"Move Files",
+		"Delete Files",
+	}, nil)
+	opTypeSelect.SetSelected("No Operation")
+
+	// Target directory selection
+	var targetDir string
+	targetDirLabel := widget.NewLabel("Target Directory: Not selected")
+	targetDirLabel.Wrapping = fyne.TextWrapWord
+
+	selectTargetBtn := widget.NewButton("Select Target Directory", func() {
+		d := dialog.NewFolderOpen(func(uri fyne.ListableURI, err error) {
+			if err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			if uri != nil {
+				targetDir = uri.Path()
+				targetDirLabel.SetText("Target Directory: " + targetDir)
+			}
+		}, w)
+		d.Resize(fyne.NewSize(500, 400))
+		d.Show()
+	})
+
+	// Conflict resolution policy
+	conflictPolicy := widget.NewSelect([]string{
+		"Skip",
+		"Overwrite",
+		"Rename",
+	}, nil)
+	conflictPolicy.SetSelected("Skip")
+
+	// Create file operations container
+	fileOpContent := container.NewVBox(
+		widget.NewLabel("Operation:"),
+		opTypeSelect,
+		widget.NewSeparator(),
+		targetDirLabel,
+		selectTargetBtn,
+		widget.NewSeparator(),
+		widget.NewLabel("On File Conflict:"),
+		conflictPolicy,
+	)
+	fileOpFrame.SetContent(fileOpContent)
+	
 	// Create search button
 	searchBtn := widget.NewButton("Start Search", nil)
+	
+	// Add label for search time
+	searchTimeLabel := widget.NewLabel("")
 	
 	// Channel for stop signal
 	var stopChan chan struct{}
 	
-	searchBtn.OnTapped = func() {
-		// Create new stop channel
-		stopChan = make(chan struct{})
-		
-		// If no directories selected, use all available drives
-		searchDirs := selectedDirs
-		if len(searchDirs) == 0 {
-			searchDirs = getAllDrives()
-			search.LogInfo("No directories selected, using all drives: %v", searchDirs)
+	// Create file operations button
+	fileOpBtn := widget.NewButton("Apply Operation", func() {
+		if len(foundFiles) == 0 {
+			dialog.ShowError(fmt.Errorf("No files found to process"), w)
+			return
 		}
-		
-		// Disable search button and show progress
-		searchBtn.Disable()
+
+		// Validate file operations
+		var fileOp search.FileOperationOptions
+		switch opTypeSelect.Selected {
+		case "Copy Files":
+			fileOp.Operation = search.CopyFiles
+		case "Move Files":
+			fileOp.Operation = search.MoveFiles
+		case "Delete Files":
+			fileOp.Operation = search.DeleteFiles
+		default:
+			dialog.ShowError(fmt.Errorf("Please select an operation"), w)
+			return
+		}
+
+		if fileOp.Operation != search.NoOperation && fileOp.Operation != search.DeleteFiles {
+			if targetDir == "" {
+				dialog.ShowError(fmt.Errorf("Please select target directory"), w)
+				return
+			}
+		}
+
+		fileOp.TargetDir = targetDir
+
+		switch conflictPolicy.Selected {
+		case "Skip":
+			fileOp.ConflictPolicy = search.Skip
+		case "Overwrite":
+			fileOp.ConflictPolicy = search.Overwrite
+		case "Rename":
+			fileOp.ConflictPolicy = search.Rename
+		}
+
+		// Create progress dialog
+		progress := dialog.NewProgress("Processing Files", "Processing files...", w)
 		progress.Show()
-		
-		opts := search.SearchOptions{
-			RootDirs:   searchDirs,
-			Pattern:    patternEntry.Text,
-			Extension:  extensionEntry.Text,
-			MaxWorkers: int(workersSlider.Value),
-			IgnoreCase: ignoreCaseCheck.Checked,
-			BufferSize: int(bufferSlider.Value),
-			StopChan:   stopChan,
-		}
-		
-		search.LogInfo("Starting search with options: %+v", opts)
-		
-		// Clear previous results
-		foundFiles = make([]FileListItem, 0)
-		resultsList.Refresh()
-		
-		// Create channel for results
-		count := 0
-		errors := 0
-		
-		// Process results in a goroutine with panic recovery
+
+		// Process files in a goroutine
 		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					search.LogError("Panic during search: %v", r)
-					// Restore interface in case of panic
-					searchBtn.Enable()
-					progress.Hide()
-					dialog.ShowError(fmt.Errorf("Search error: %v", r), w)
-					if stopChan != nil {
-						close(stopChan)
-					}
-				}
-			}()
-			
-			// Create channel for results
-			results := search.Search(opts)
-			
-			// Channel for UI updates
-			updateTicker := time.NewTicker(100 * time.Millisecond)
-			defer updateTicker.Stop()
-			
-			needsUpdate := false
-			
-			// Process results
-			for {
-				select {
-				case result, ok := <-results:
-					if !ok {
-						// Channel closed, finish search
-						if needsUpdate {
-							resultsList.Refresh()
-						}
-						searchBtn.Enable()
-						progress.Hide()
-						search.LogInfo("Search completed. Found %d files, %d errors", count, errors)
-						return
-					}
-					count++
-					if result.Error != nil {
-						errors++
-						search.LogError("Error processing file %s: %v", result.Path, result.Error)
-					} else {
-						search.LogDebug("Found file: %s (Size: %d bytes)", result.Path, result.Size)
-						foundFiles = append(foundFiles, FileListItem{
-							Path: result.Path,
-							Size: result.Size,
-						})
-						needsUpdate = true
-					}
-					
-				case <-updateTicker.C:
-					// Update UI only if there are new results
-					if needsUpdate {
-						resultsList.Refresh()
-						needsUpdate = false
-					}
-					
-				case <-stopChan:
-					// Stop signal received
-					if needsUpdate {
-						resultsList.Refresh()
-					}
-					search.LogInfo("Search stopped by user. Found %d files, %d errors", count, errors)
-					searchBtn.Enable()
-					progress.Hide()
-					return
+			processor := search.NewFileOperationProcessor(runtime.NumCPU())
+			processor.Start()
+			defer processor.Stop()
+
+			total := len(foundFiles)
+			for i, file := range foundFiles {
+				// Update progress
+				progress.SetValue(float64(i) / float64(total))
+
+				// Process file
+				if err := search.HandleFileOperation(file.Path, fileOp); err != nil {
+					search.LogError("Failed to process file %s: %v", file.Path, err)
+					continue
 				}
 			}
+
+			// Close progress dialog
+			progress.Hide()
+
+			// Show completion dialog
+			dialog.ShowInformation("Operation Complete", 
+				fmt.Sprintf("Processed %d files", total), w)
+
+			// Clear results if files were moved or deleted
+			if fileOp.Operation == search.MoveFiles || fileOp.Operation == search.DeleteFiles {
+				foundFiles = make([]FileListItem, 0)
+				resultsList.Refresh()
+			}
 		}()
-	}
-	
+	})
+	fileOpBtn.Disable() // Disabled by default
+
 	// Create stop button
 	stopBtn := widget.NewButton("Stop Search", func() {
 		if stopChan != nil {
@@ -376,11 +443,16 @@ func main() {
 		bufferSlider,
 		dirButtons,
 		dirsLabel,
+		widget.NewSeparator(),
+		fileOpFrame,
+		widget.NewSeparator(),
 		searchBtn,
+		searchTimeLabel,
+		fileOpBtn,
 		stopBtn,
 		progress,
 		exitBtn,
-		widget.NewSeparator(), // Separator before About section
+		widget.NewSeparator(),
 		aboutBox,
 	)
 	
@@ -396,6 +468,162 @@ func main() {
 	w.SetCloseIntercept(func() {
 		a.Quit()
 	})
+	
+	searchBtn.OnTapped = func() {
+		// Create new stop channel
+		stopChan = make(chan struct{})
+		
+		// If no directories selected, use all available drives
+		searchDirs := selectedDirs
+		if len(searchDirs) == 0 {
+			searchDirs = getAllDrives()
+			search.LogInfo("No directories selected, using all drives: %v", searchDirs)
+		}
+		
+		// Disable buttons and show progress
+		searchBtn.Disable()
+		fileOpBtn.Disable()
+		progress.Show()
+		
+		// Reset search time label
+		searchTimeLabel.SetText("Searching...")
+		
+		// Record start time
+		startTime := time.Now()
+		
+		opts := search.SearchOptions{
+			RootDirs:    searchDirs,
+			Patterns:    splitCommaList(patternEntry.Text),
+			Extensions:  splitCommaList(extensionEntry.Text),
+			MaxWorkers:  int(workersSlider.Value),
+			IgnoreCase:  ignoreCaseCheck.Checked,
+			BufferSize:  int(bufferSlider.Value),
+			StopChan:    stopChan,
+			ExcludeDirs: []string{},
+		}
+
+		// If target directory is set, add it to excluded directories
+		if targetDir != "" {
+			opts.ExcludeDirs = append(opts.ExcludeDirs, targetDir)
+		}
+		
+		search.LogInfo("Starting search with options: %+v", opts)
+		
+		// Clear previous results
+		foundFiles = make([]FileListItem, 0)
+		resultsList.Refresh()
+		
+		// Create channel for results
+		count := 0
+		errors := 0
+		
+		// Process results in a goroutine with panic recovery
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					search.LogError("Panic during search: %v", r)
+					// Restore interface in case of panic
+					searchBtn.Enable()
+					fileOpBtn.Disable()
+					progress.Hide()
+					dialog.ShowError(fmt.Errorf("Search error: %v", r), w)
+					if stopChan != nil {
+						close(stopChan)
+					}
+				}
+			}()
+			
+			// Create channel for results
+			results := search.Search(opts)
+			
+			// Channel for UI updates
+			updateTicker := time.NewTicker(100 * time.Millisecond)
+			defer updateTicker.Stop()
+			
+			needsUpdate := false
+			
+			// Process results
+			for {
+				select {
+				case result, ok := <-results:
+					if !ok {
+						// Channel closed, finish search
+						if needsUpdate {
+							resultsList.Refresh()
+						}
+						searchBtn.Enable()
+						if len(foundFiles) > 0 {
+							fileOpBtn.Enable()
+						}
+						progress.Hide()
+						
+						// Calculate and display search time
+						duration := time.Since(startTime)
+						seconds := int(duration.Seconds())
+						milliseconds := int(duration.Milliseconds()) % 1000
+						searchTimeLabel.SetText(fmt.Sprintf("Search completed in %d.%03d seconds\n(%d files found, %d errors)",
+							seconds,
+							milliseconds,
+							count,
+							errors))
+						
+						search.LogInfo("Search completed in %v. Found %d files, %d errors", duration, count, errors)
+						return
+					}
+					count++
+					if result.Error != nil {
+						errors++
+						search.LogError("Error processing file %s: %v", result.Path, result.Error)
+					} else {
+						search.LogDebug("Found file: %s (Size: %d bytes)", result.Path, result.Size)
+						foundFiles = append(foundFiles, FileListItem{
+							Path: result.Path,
+							Size: result.Size,
+						})
+						needsUpdate = true
+					}
+					
+				case <-updateTicker.C:
+					// Update UI only if there are new results
+					if needsUpdate {
+						resultsList.Refresh()
+						needsUpdate = false
+					}
+					// Update search time
+					duration := time.Since(startTime)
+					seconds := int(duration.Seconds())
+					milliseconds := int(duration.Milliseconds()) % 1000
+					searchTimeLabel.SetText(fmt.Sprintf("Searching... %d.%03d seconds",
+						seconds,
+						milliseconds))
+					
+				case <-stopChan:
+					// Stop signal received
+					if needsUpdate {
+						resultsList.Refresh()
+					}
+					searchBtn.Enable()
+					if len(foundFiles) > 0 {
+						fileOpBtn.Enable()
+					}
+					progress.Hide()
+					
+					// Calculate and display final search time
+					duration := time.Since(startTime)
+					seconds := int(duration.Seconds())
+					milliseconds := int(duration.Milliseconds()) % 1000
+					searchTimeLabel.SetText(fmt.Sprintf("Search stopped after %d.%03d seconds\n(%d files found, %d errors)",
+						seconds,
+						milliseconds,
+						count,
+						errors))
+					
+					search.LogInfo("Search stopped by user after %v. Found %d files, %d errors", duration, count, errors)
+					return
+				}
+			}
+		}()
+	}
 	
 	w.ShowAndRun()
 } 

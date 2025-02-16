@@ -1,6 +1,7 @@
 package search
 
 import (
+	"fmt"
 	"os"
 	"runtime"
 	"runtime/debug"
@@ -36,6 +37,13 @@ func Search(opts SearchOptions) chan SearchResult {
 	// Create result processor
 	processor := newResultProcessor(results, opts)
 	
+	// Create file operation processor if needed
+	var fileOpProcessor *FileOperationProcessor
+	if opts.FileOp.Operation != NoOperation {
+		fileOpProcessor = NewFileOperationProcessor(opts.MaxWorkers / 2)
+		fileOpProcessor.Start()
+	}
+	
 	var wg sync.WaitGroup
 	
 	// Start file matcher goroutines
@@ -46,7 +54,7 @@ func Search(opts SearchOptions) chan SearchResult {
 			
 			// Create batch processor
 			batchProc := newBatchProcessor(opts.BatchSize, func(batch []string) {
-				processFileBatch(batch, patterns, opts, processor)
+				processFileBatch(batch, patterns, opts, processor, fileOpProcessor)
 			})
 			
 			// Process files
@@ -84,6 +92,12 @@ func Search(opts SearchOptions) chan SearchResult {
 		walkWg.Wait()
 		close(paths)
 		wg.Wait()
+		
+		// Stop file operation processor if it was used
+		if fileOpProcessor != nil {
+			fileOpProcessor.Stop()
+		}
+		
 		processor.close()
 	}()
 	
@@ -95,7 +109,7 @@ func Search(opts SearchOptions) chan SearchResult {
 }
 
 // processFileBatch processes a batch of files
-func processFileBatch(batch []string, patterns compiledPatterns, opts SearchOptions, processor *resultProcessor) {
+func processFileBatch(batch []string, patterns compiledPatterns, opts SearchOptions, processor *resultProcessor, fileOpProcessor *FileOperationProcessor) {
 	buf := bufferPool.Get().([]byte)
 	defer bufferPool.Put(buf)
 	
@@ -104,15 +118,53 @@ func processFileBatch(batch []string, patterns compiledPatterns, opts SearchOpti
 		if err != nil {
 			continue
 		}
+
+		// Check if file matches patterns and constraints before processing
+		if !matchesPatterns(path, patterns, opts.IgnoreCase) ||
+			!matchesFileConstraints(info, opts) {
+			continue
+		}
 		
 		// Use mmap for large files
 		if opts.UseMMap && info.Size() >= opts.MinMMapSize {
 			if err := processByMMap(path, info, patterns, opts, processor); err == nil {
+				// Queue file operation if needed
+				if fileOpProcessor != nil && opts.FileOp.Operation != NoOperation {
+					fileOpProcessor.Add(path, opts.FileOp, info)
+				}
 				continue
 			}
 		}
 		
 		// Regular processing for other files
-		processRegularFile(path, info, patterns, opts, processor, buf)
+		var hash uint64
+		var hashErr error
+		
+		// Safe hash calculation
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logError("Panic while calculating hash for %s: %v", path, r)
+					hashErr = fmt.Errorf("hash calculation failed: %v", r)
+				}
+			}()
+			hash = calculateQuickHash(path, info, buf)
+		}()
+		
+		result := SearchResult{
+			Path:    path,
+			Size:    info.Size(),
+			Mode:    info.Mode(),
+			ModTime: info.ModTime(),
+			Hash:    hash,
+			Error:   hashErr,
+		}
+		
+		processor.add(result)
+		
+		// Queue file operation if needed
+		if fileOpProcessor != nil && opts.FileOp.Operation != NoOperation {
+			fileOpProcessor.Add(path, opts.FileOp, info)
+		}
 	}
 } 

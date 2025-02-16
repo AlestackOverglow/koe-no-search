@@ -21,8 +21,8 @@ type SearchResult struct {
 // SearchOptions contains search parameters
 type SearchOptions struct {
 	RootDirs         []string        // List of root directories to search
-	Pattern          string
-	Extension        string
+	Patterns         []string        // List of search patterns
+	Extensions       []string        // List of file extensions
 	MaxWorkers       int
 	IgnoreCase       bool
 	BufferSize       int             // Channel buffer size
@@ -41,6 +41,8 @@ type SearchOptions struct {
 	PriorityDirs     []string       // Directories for priority search
 	LowPriorityDirs  []string       // Directories for low priority search
 	StopChan         chan struct{}  // Channel for stopping the search
+	FileOp           FileOperationOptions
+	ExcludeDirs      []string       // Directories to exclude from search
 }
 
 // FileMetadata stores file metadata for quick comparison
@@ -78,8 +80,8 @@ type FileIndex struct {
 
 // compiledPatterns holds pre-compiled patterns for faster matching
 type compiledPatterns struct {
-	pattern   *regexp.Regexp
-	extension string
+	patterns   []*regexp.Regexp
+	extensions []string
 }
 
 // BatchProcessor processes files in batches for better performance
@@ -87,4 +89,51 @@ type BatchProcessor struct {
 	batch    []string
 	size     int
 	callback func([]string)
+}
+
+// FileOperation represents the type of operation to perform on found files
+type FileOperation int
+
+const (
+	NoOperation FileOperation = iota
+	CopyFiles
+	MoveFiles
+	DeleteFiles
+)
+
+// FileOperationOptions contains settings for file operations
+type FileOperationOptions struct {
+	Operation       FileOperation
+	TargetDir      string
+	ConflictPolicy ConflictResolutionPolicy
+}
+
+// ConflictResolutionPolicy defines how to handle file name conflicts
+type ConflictResolutionPolicy int
+
+const (
+	Skip ConflictResolutionPolicy = iota
+	Overwrite
+	Rename
+)
+
+// BloomFilter represents a probabilistic set data structure
+type BloomFilter struct {
+	bits    []bool
+	numBits uint
+	numHash uint
+}
+
+// BloomFilterOptions contains configuration for bloom filters
+type BloomFilterOptions struct {
+	ExpectedItems uint    // Expected number of items
+	FalsePositive float64 // Acceptable false positive rate (0.0 to 1.0)
+}
+
+// FileFilterSet contains bloom filters for different file attributes
+type FileFilterSet struct {
+	Extensions *BloomFilter // Filter for file extensions
+	Paths      *BloomFilter // Filter for file paths
+	Dirs       *BloomFilter // Filter for processed directories
+	mu         sync.RWMutex
 } 

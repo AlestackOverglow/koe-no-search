@@ -18,7 +18,15 @@ var (
 		"$RECYCLE.BIN": true, "System Volume Information": true,
 		"Windows": true, "Program Files": true, "Program Files (x86)": true,
 		"ProgramData": true, "AppData": true, "Recovery": true,
+		"Documents and Settings": true, // Legacy Windows directory
+		"System32": true,
+		"SysWOW64": true,
+		"WindowsApps": true,
+		"WinSxS": true,
 	}
+	
+	// Global file filter set
+	globalFileFilter = NewFileFilterSet()
 	
 	// File read buffer pool
 	bufferPool = sync.Pool{

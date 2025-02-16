@@ -53,27 +53,20 @@ func ShowInExplorer(path string) {
 
 	switch runtime.GOOS {
 	case "windows":
-		// Use explorer.exe directly
-		explorerPath := "explorer.exe"
-		if windir := os.Getenv("WINDIR"); windir != "" {
-			explorerPath = filepath.Join(windir, "explorer.exe")
-			if _, err := os.Stat(explorerPath); err != nil {
-				explorerPath = "explorer.exe" // Fallback to PATH
-			}
+		// Convert path to Windows format
+		absPath = strings.ReplaceAll(absPath, "/", "\\")
+		
+		// Use shell command to open explorer
+		cmdPath := os.Getenv("COMSPEC")
+		if cmdPath == "" {
+			cmdPath = `C:\Windows\System32\cmd.exe`
 		}
-
-		// Try to open file with selection first
-		cmd := exec.Command(explorerPath, "/select,", absPath)
+		
+		// Use /c to close cmd after execution and start to run explorer asynchronously
+		cmd := exec.Command(cmdPath, "/c", "start", "explorer.exe", "/select,", absPath)
 		if err := cmd.Run(); err != nil {
-			search.LogWarning("Failed to open file with selection, trying to open directory: %v", err)
-			
-			// If selection fails, try to open the directory
-			dirPath := filepath.Dir(absPath)
-			cmd = exec.Command(explorerPath, dirPath)
-			if err := cmd.Run(); err != nil {
-				search.LogError("Failed to open directory in explorer: %v", err)
-				dialog.ShowError(fmt.Errorf("Failed to open in explorer: %v", err), nil)
-			}
+			search.LogError("Failed to open in explorer: %v", err)
+			dialog.ShowError(fmt.Errorf("Failed to open in explorer: %v", err), nil)
 		}
 		
 	case "darwin":

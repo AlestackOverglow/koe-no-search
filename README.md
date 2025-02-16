@@ -1,7 +1,7 @@
 # Koe no Search
 
 <div align="center">
-
+<img src="koe.png">
 > 🔍 Lightning-fast file search utility with modern GUI and CLI interfaces, designed for efficiency and ease of use.
 
 [![Go Version](https://img.shields.io/badge/Go-1.21%2B-blue.svg)](https://golang.org/dl/)

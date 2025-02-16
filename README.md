@@ -127,7 +127,7 @@
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/koe-no-search.git
+   git clone https://github.com/AlestackOverglow/koe-no-search.git
    cd koe-no-search
    ```
 

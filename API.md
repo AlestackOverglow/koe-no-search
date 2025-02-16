@@ -18,7 +18,7 @@ This document describes the public API of the Koe no Search library, which you c
 ## Installation
 
 ```bash
-go get github.com/yourusername/koe-no-search
+go get github.com/AlestackOverglow/koe-no-search
 ```
 
 ### Requirements
@@ -465,4 +465,4 @@ search.LogDebug("Starting search with options: %+v", opts)
 ## Support
 
 For issues and feature requests, please visit:
-https://github.com/yourusername/koe-no-search/issues 
+https://github.com/AlestackOverglow/koe-no-search/issues 

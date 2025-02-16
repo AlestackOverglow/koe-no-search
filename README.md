@@ -1,7 +1,7 @@
 # Koe no Search
 
 <div align="center">
-![Koe icon](koe.png)
+![Image koe](https://github.com/AlestackOverglow/koe-no-search/raw/main/koe.png)
 
 > 🔍 Lightning-fast file search utility with modern GUI and CLI interfaces, designed for efficiency and ease of use.
 

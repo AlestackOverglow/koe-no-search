@@ -117,6 +117,13 @@ func main() {
 	defer search.CloseLogger()
 	
 	a := app.New()
+
+	// Set application icon
+	if len(search.IconData) > 0 {
+		iconResource := fyne.NewStaticResource("icon.png", search.IconData)
+		a.SetIcon(iconResource)
+	}
+
 	w := a.NewWindow(fmt.Sprintf("Koe no Search v%s", search.Version))
 	
 	// Create input fields

@@ -24,6 +24,7 @@ var (
 	bufferSize      int
 	showSize        bool
 	openInExplorer  bool
+	showVersion     bool
 )
 
 // formatSize formats file size in human-readable form
@@ -68,8 +69,16 @@ func main() {
 		Long: `A high-performance file search utility with advanced features.
 Supports multiple patterns and extensions for searching.
 Example: filesearch -p "*.txt" -p "*.doc" -e txt -e doc -i /home /usr`,
+		Version: search.Version,
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
+			if showVersion {
+				fmt.Printf("Koe no Search v%s\n", search.Version)
+				fmt.Printf("Build Time: %s\n", search.BuildTime)
+				fmt.Printf("Git Commit: %s\n", search.GitCommit)
+				return
+			}
+
 			if workers <= 0 {
 				workers = runtime.NumCPU()
 			}
@@ -153,6 +162,7 @@ Example: filesearch -p "*.txt" -p "*.doc" -e txt -e doc -i /home /usr`,
 	rootCmd.Flags().IntVarP(&bufferSize, "buffer", "b", 1000, "Size of the internal buffers")
 	rootCmd.Flags().BoolVarP(&showSize, "size", "s", true, "Show file sizes")
 	rootCmd.Flags().BoolVarP(&openInExplorer, "open", "o", false, "Open file location in explorer (when single file found)")
+	rootCmd.Flags().BoolVarP(&showVersion, "version", "v", false, "Show version information")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

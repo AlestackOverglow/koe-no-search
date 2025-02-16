@@ -117,7 +117,7 @@ func main() {
 	defer search.CloseLogger()
 	
 	a := app.New()
-	w := a.NewWindow("Koe no Search")
+	w := a.NewWindow(fmt.Sprintf("Koe no Search v%s", search.Version))
 	
 	// Create input fields
 	patternEntry := widget.NewEntry()
@@ -241,10 +241,7 @@ func main() {
 		updateDirsLabel()
 	})
 	
-	// File operations frame
-	fileOpFrame := widget.NewCard("File Operations", "", nil)
-	
-	// Operation type selection
+	// File operations section
 	opTypeSelect := widget.NewSelect([]string{
 		"No Operation",
 		"Copy Files",
@@ -281,7 +278,6 @@ func main() {
 	}, nil)
 	conflictPolicy.SetSelected("Skip")
 
-	// Create file operations container
 	fileOpContent := container.NewVBox(
 		widget.NewLabel("Operation:"),
 		opTypeSelect,
@@ -292,7 +288,11 @@ func main() {
 		widget.NewLabel("On File Conflict:"),
 		conflictPolicy,
 	)
-	fileOpFrame.SetContent(fileOpContent)
+
+	fileOpAccordion := widget.NewAccordion(
+		widget.NewAccordionItem("File Operations", fileOpContent),
+	)
+	fileOpAccordion.Close(0) // Close the first (and only) item
 	
 	// Create search button
 	searchBtn := widget.NewButton("Start Search", nil)
@@ -444,7 +444,7 @@ func main() {
 		dirButtons,
 		dirsLabel,
 		widget.NewSeparator(),
-		fileOpFrame,
+		fileOpAccordion,
 		widget.NewSeparator(),
 		searchBtn,
 		searchTimeLabel,

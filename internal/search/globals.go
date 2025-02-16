@@ -4,6 +4,13 @@ import (
 	"sync"
 )
 
+// Version information
+var (
+	Version = "0.2.0"
+	BuildTime = "unknown"
+	GitCommit = "unknown"
+)
+
 var (
 	globalCache = newCache()
 	

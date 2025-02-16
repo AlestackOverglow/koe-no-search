@@ -11,7 +11,6 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)]()
 
-<img src="screenshot.png">
 </div>
 
 ## Table of Contents
@@ -42,7 +41,7 @@
    - GUI version: `koe-no-search-gui`
    - CLI version: `koe-no-search-cli -p "*.txt" /path/to/search`
 3. Start searching!
-
+<img src="screenshot.png">
 ## ✨ Key Features
 
 - 🔍 Instant search without indexing

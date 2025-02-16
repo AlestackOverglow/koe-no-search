@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)]()
 
-<img src="screenshot.png" width="50" height="90">
+<img src="screenshot.png">
 </div>
 
 ## Table of Contents

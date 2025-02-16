@@ -1,16 +1,39 @@
 # Koe no Search
 
+<div align="center">
+
 > 🔍 Lightning-fast file search utility with modern GUI and CLI interfaces, designed for efficiency and ease of use.
 
 [![Go Version](https://img.shields.io/badge/Go-1.21%2B-blue.svg)](https://golang.org/dl/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)]()
 
-A high-performance file search utility with both GUI and CLI interfaces, designed to quickly find files across your system using various optimization techniques.
-
 ![Koe no Search Screenshot](screenshot.png)
 
-## 🚀 Quick Start
+</div>
+
+## Table of Contents
+- [Quick Start](#quick-start)
+- [Key Features](#-key-features)
+- [Why Koe no Search?](#-why-koe-no-search)
+- [System Requirements](#-system-requirements)
+  - [Minimum Requirements](#minimum-requirements)
+  - [Recommended](#recommended)
+- [Installation](#-installation)
+  - [Prerequisites](#prerequisites)
+  - [GUI Build Requirements](#gui-build-requirements)
+  - [Building from Source](#building-from-source)
+- [Usage Examples](#-usage-examples)
+  - [GUI Interface](#gui-interface)
+  - [CLI Interface](#cli-interface)
+- [API Documentation](#-api-documentation)
+- [Technical Details](#-technical-details)
+  - [Performance Optimizations](#performance-optimizations)
+- [Contributing](#-contributing)
+- [License](#-license)
+- [Acknowledgments](#-acknowledgments)
+
+## Quick Start
 
 1. Download the latest release for your platform
 2. Run the executable:
@@ -56,42 +79,6 @@ A high-performance file search utility with both GUI and CLI interfaces, designe
 
 \* Search speed measured on Windows 10, Intel i7, 16GB RAM, SSD, searching through 1 million files (mixed sizes) in system directories. First search after system startup, no indexing.
 
-## 💡 Usage Examples
-
-### GUI Interface
-
-1. **Basic File Search**
-   - Enter pattern: `*.txt`
-   - Select directory
-   - Click "Start Search"
-
-2. **Advanced Search**
-   - Multiple patterns: `*.doc, *.docx`
-   - Enable case-sensitive search
-   - Adjust worker threads for performance
-
-3. **File Operations**
-   - Select found files
-   - Choose operation (Copy/Move/Delete)
-   - Set target directory
-   - Handle conflicts (Skip/Overwrite/Rename)
-
-### CLI Interface
-
-```bash
-# Search for text files
-koe-no-search-cli -p "*.txt" /home/user
-
-# Case-insensitive search for documents
-koe-no-search-cli -i -p "*.doc*" /work/documents
-
-# Search with multiple patterns and extensions
-koe-no-search-cli -p "report*" -e "pdf,doc,txt" /data
-
-# Advanced search with worker configuration
-koe-no-search-cli -w 8 -b 2000 -p "*.go" /src
-```
-
 ## 🔧 System Requirements
 
 ### Minimum Requirements
@@ -105,33 +92,6 @@ koe-no-search-cli -w 8 -b 2000 -p "*.go" /src
 - CPU: Quad-core processor
 - SSD Storage
 - OS: Latest version of your platform
-
-## 🛠️ Technical Details
-
-### Performance Optimizations
-
-1. **Concurrent Processing**
-   - Multiple worker goroutines
-   - Batch processing
-   - Configurable thread count
-
-2. **Memory Management**
-   - Memory pooling
-   - Memory-mapped files
-   - Buffer reuse
-   - Optimized GC
-
-3. **File System Optimizations**
-   - Directory caching
-   - Smart walking
-   - Early filtering
-   - Symlink handling
-
-4. **Search Optimizations**
-   - Quick pattern matching
-   - Compiled regex
-   - Case-folding optimization
-   - Priority processing
 
 ## 📦 Installation
 
@@ -187,6 +147,80 @@ koe-no-search-cli -w 8 -b 2000 -p "*.go" /src
    # CLI version
    go build -o koe-no-search-cli ./cmd/cli
    ```
+
+## 💡 Usage Examples
+
+### GUI Interface
+
+1. **Basic File Search**
+   - Enter pattern: `*.txt`
+   - Select directory
+   - Click "Start Search"
+
+2. **Advanced Search**
+   - Multiple patterns: `*.doc, *.docx`
+   - Enable case-sensitive search
+   - Adjust worker threads for performance
+
+3. **File Operations**
+   - Select found files
+   - Choose operation (Copy/Move/Delete)
+   - Set target directory
+   - Handle conflicts (Skip/Overwrite/Rename)
+
+### CLI Interface
+
+```bash
+# Search for text files
+koe-no-search-cli -p "*.txt" /home/user
+
+# Case-insensitive search for documents
+koe-no-search-cli -i -p "*.doc*" /work/documents
+
+# Search with multiple patterns and extensions
+koe-no-search-cli -p "report*" -e "pdf,doc,txt" /data
+
+# Advanced search with worker configuration
+koe-no-search-cli -w 8 -b 2000 -p "*.go" /src
+```
+
+## 📚 API Documentation
+
+For developers who want to integrate Koe no Search into their applications, we provide a comprehensive API. See our [API Documentation](API.md) for detailed information about:
+
+- Core Types and Structures
+- Search Functions
+- File Operations
+- Performance Optimization
+- Best Practices
+- Error Handling
+
+## 🛠️ Technical Details
+
+### Performance Optimizations
+
+1. **Concurrent Processing**
+   - Multiple worker goroutines
+   - Batch processing
+   - Configurable thread count
+
+2. **Memory Management**
+   - Memory pooling
+   - Memory-mapped files
+   - Buffer reuse
+   - Optimized GC
+
+3. **File System Optimizations**
+   - Directory caching
+   - Smart walking
+   - Early filtering
+   - Symlink handling
+
+4. **Search Optimizations**
+   - Quick pattern matching
+   - Compiled regex
+   - Case-folding optimization
+   - Priority processing
 
 ## 🤝 Contributing
 

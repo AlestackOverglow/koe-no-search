@@ -1,7 +1,6 @@
 # Koe no Search
 
 <div align="center">
-<img src="koe.png">
   
 > 🔍 Lightning-fast file search utility with modern GUI and CLI interfaces, designed for efficiency and ease of use.
 

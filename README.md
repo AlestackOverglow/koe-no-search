@@ -41,8 +41,8 @@
 - Cross-platform support
 - Built-in file operations
 - Real-time progress tracking
-- Memory-mapped file handling
 - Pattern and extension filtering
+- Case-sensitive/insensitive search
 
 ## System Requirements
 
@@ -53,9 +53,8 @@
 - OS: Windows 7+, Ubuntu 18.04+, macOS 10.13+
 
 ### Recommended
-- RAM: 1GB+
+- RAM: 512MB+
 - CPU: Quad-core processor
-- SSD Storage
 - OS: Latest version of your platform
 
 ## Installation
@@ -104,7 +103,7 @@ go build -o koe-no-search-cli ./cmd/cli
 - Enter search pattern (e.g., `*.txt`)
 - Select directory
 - Click "Start Search"
-- Use advanced options for more precise search
+- Use file operations for found files
 
 ### CLI Interface
 ```bash
@@ -118,7 +117,7 @@ koe-no-search-cli -i -p "*.doc*" -e "pdf,doc,txt" /path/to/search
 ## Documentation
 - [About](ABOUT_EN.md) - Detailed description and technical details
 - [API Documentation](API.md) - Integration guide for developers
-- [Future Improvements](ABOUT_EN.md#future-improvements) - Planned features
+- [Future Improvements](ABOUT_EN.md#future-improvements) - Planned features and enhancements
 
 ## Contributing
 
@@ -129,8 +128,6 @@ koe-no-search-cli -i -p "*.doc*" -e "pdf,doc,txt" /path/to/search
 5. Push to branch (`git push origin feature/amazing-feature`)
 6. Open Pull Request
 
-Check out the [Future Improvements](ABOUT_EN.md#future-improvements) section in our documentation for a list of planned features and enhancements. Feel free to pick any of these improvements to implement - your contributions are welcome!
-
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -139,5 +136,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - [Fyne](https://fyne.io/) - GUI toolkit
 - [xxHash](https://github.com/cespare/xxhash) - Fast hashing
-- [mmap-go](https://github.com/edsrzf/mmap-go) - Memory mapping
 - [cobra](https://github.com/spf13/cobra) - CLI interface

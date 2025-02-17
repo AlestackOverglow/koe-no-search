@@ -93,9 +93,6 @@ func main() {
 	// Create results list
 	vlist, foundFiles := ui.CreateResultsList()
 	
-	// Create settings panel
-	settingsPanel := ui.CreateSettingsPanel(w)
-	
 	// Create file operations panel
 	fileOpPanel := ui.CreateFileOperationsPanel(w, foundFiles)
 	
@@ -152,13 +149,6 @@ func main() {
 		repoLink,
 	)
 	
-	// Create advanced settings accordion
-	advancedSettingsContent := settingsPanel.GetContent()
-	advancedSettingsAccordion := widget.NewAccordion(
-		widget.NewAccordionItem("Advanced Settings", advancedSettingsContent),
-	)
-	advancedSettingsAccordion.Close(0) // Closed by default
-	
 	// Create file operations accordion
 	fileOpContent := fileOpPanel.GetContent()
 	fileOpAccordion := widget.NewAccordion(
@@ -169,8 +159,6 @@ func main() {
 	// Layout
 	inputs := container.NewVBox(
 		searchPanel.GetContent(),
-		widget.NewSeparator(),
-		advancedSettingsAccordion,
 		widget.NewSeparator(),
 		fileOpAccordion,
 		widget.NewSeparator(),

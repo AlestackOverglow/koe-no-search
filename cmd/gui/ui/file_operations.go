@@ -8,6 +8,9 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"filesearch/internal/search"
 	"runtime"
+	"sync"
+	"time"
+	"sync/atomic"
 )
 
 // FileOperationsPanel contains all file operation related widgets
@@ -18,6 +21,7 @@ type FileOperationsPanel struct {
 	ConflictPolicy  *widget.Select
 	TargetDir       string
 	OperationBtn    *widget.Button
+	mu              sync.Mutex // Защита для foundFiles
 }
 
 // CreateFileOperationsPanel creates and returns file operations panel widgets
@@ -101,32 +105,49 @@ func CreateFileOperationsPanel(window fyne.Window, foundFiles *[]FileListItem) *
 
 		// Process files in a goroutine
 		go func() {
-			processor := search.NewFileOperationProcessor(runtime.NumCPU())
-			processor.Start()
+			processor := search.NewFileOperationProcessor(search.ProcessorOptions{
+				Workers:          runtime.NumCPU(),
+				MaxQueueSize:     1000,
+				ThrottleInterval: 100 * time.Millisecond,
+			})
+			if err := processor.Start(); err != nil {
+				dialog.ShowError(fmt.Errorf("Failed to start processor: %v", err), window)
+				return
+			}
 			defer processor.Stop()
 
-			total := len(*foundFiles)
-			for i, file := range *foundFiles {
-				// Update progress
-				progress.SetValue(float64(i) / float64(total))
+			panel.mu.Lock()
+			filesToProcess := make([]FileListItem, len(*foundFiles))
+			copy(filesToProcess, *foundFiles)
+			total := len(filesToProcess)
+			panel.mu.Unlock()
 
-				// Process file
+			var processed int32
+			for i, file := range filesToProcess {
+				if progress != nil {
+					progress.SetValue(float64(i) / float64(total))
+				}
+
 				if err := search.HandleFileOperation(file.Path, fileOp); err != nil {
 					search.LogError("Failed to process file %s: %v", file.Path, err)
 					continue
 				}
+				atomic.AddInt32(&processed, 1)
 			}
 
-			// Close progress dialog
-			progress.Hide()
+			if progress != nil {
+				progress.Hide()
+			}
 
 			// Show completion dialog
 			dialog.ShowInformation("Operation Complete", 
-				fmt.Sprintf("Processed %d files", total), window)
+				fmt.Sprintf("Processed %d files", processed), window)
 
 			// Clear results if files were moved or deleted
 			if fileOp.Operation == search.MoveFiles || fileOp.Operation == search.DeleteFiles {
+				panel.mu.Lock()
 				*foundFiles = make([]FileListItem, 0)
+				panel.mu.Unlock()
 			}
 		}()
 	}

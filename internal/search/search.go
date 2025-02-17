@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sync"
+	"time"
 )
 
 // Search performs concurrent file search based on given options
@@ -40,7 +41,11 @@ func Search(opts SearchOptions) chan SearchResult {
 	// Create file operation processor if needed
 	var fileOpProcessor *FileOperationProcessor
 	if opts.FileOp.Operation != NoOperation {
-		fileOpProcessor = NewFileOperationProcessor(opts.MaxWorkers / 2)
+		fileOpProcessor = NewFileOperationProcessor(ProcessorOptions{
+			Workers:          opts.MaxWorkers / 2,
+			MaxQueueSize:     1000,
+			ThrottleInterval: 100 * time.Millisecond,
+		})
 		fileOpProcessor.Start()
 	}
 	

@@ -5,7 +5,6 @@ import (
 	"os"
 	"sync"
 	"time"
-	"regexp"
 )
 
 // SearchResult represents a single found file
@@ -76,12 +75,6 @@ type FileIndex struct {
 	DirStats  map[string]*DirStats
 	LastBuild time.Time
 	sync.RWMutex
-}
-
-// compiledPatterns holds pre-compiled patterns for faster matching
-type compiledPatterns struct {
-	patterns   []*regexp.Regexp
-	extensions []string
 }
 
 // BatchProcessor processes files in batches for better performance

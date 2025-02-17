@@ -5,90 +5,234 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 	"github.com/edsrzf/mmap-go"
 	"github.com/cespare/xxhash"
 )
 
+// Структуры для работы с паттернами
+type compiledPatterns struct {
+	patterns       []*regexp.Regexp
+	simplePatterns []string
+	extensions     []string
+}
+
+// Cache for compiled patterns to avoid recompilation
+var patternCache struct {
+	sync.RWMutex
+	patterns       map[string]*regexp.Regexp
+	simplePatterns map[string]string
+	lowerCache     map[string]string // Кэш для преобразования в нижний регистр
+}
+
+func init() {
+	patternCache.patterns = make(map[string]*regexp.Regexp, 100)
+	patternCache.simplePatterns = make(map[string]string, 100)
+	patternCache.lowerCache = make(map[string]string, 1000)
+}
+
+// getCompiledPattern returns a cached compiled pattern or creates a new one
+func getCompiledPattern(pattern string, ignoreCase bool) *regexp.Regexp {
+	if ignoreCase {
+		pattern = "(?i)" + pattern
+	}
+
+	patternCache.RLock()
+	if re, ok := patternCache.patterns[pattern]; ok {
+		patternCache.RUnlock()
+		return re
+	}
+	patternCache.RUnlock()
+
+	patternCache.Lock()
+	defer patternCache.Unlock()
+
+	// Double check after acquiring write lock
+	if re, ok := patternCache.patterns[pattern]; ok {
+		return re
+	}
+
+	re := regexp.MustCompile(pattern)
+	patternCache.patterns[pattern] = re
+	return re
+}
+
 // preparePatterns pre-compiles patterns for faster matching
 func preparePatterns(opts SearchOptions) compiledPatterns {
-	var patterns []*regexp.Regexp
+	patterns := make([]*regexp.Regexp, 0, len(opts.Patterns))
+	simplePatterns := make([]string, 0, len(opts.Patterns))
 	
-	for _, pat := range opts.Patterns {
-		if pat != "" {
-			patternStr := regexp.QuoteMeta(pat)
-			if opts.IgnoreCase {
-				patternStr = "(?i)" + patternStr
-			}
-			patterns = append(patterns, regexp.MustCompile(patternStr))
-		}
-	}
-	
-	// Convert extensions to lowercase if case-insensitive
+	// Предварительно сортируем расширения один раз
 	extensions := make([]string, 0, len(opts.Extensions))
-	for _, ext := range opts.Extensions {
-		if ext != "" {
+	if len(opts.Extensions) > 0 {
+		seen := make(map[string]bool, len(opts.Extensions))
+		for _, ext := range opts.Extensions {
+			if ext == "" {
+				continue
+			}
 			if opts.IgnoreCase {
 				ext = strings.ToLower(ext)
 			}
 			if !strings.HasPrefix(ext, ".") {
 				ext = "." + ext
 			}
-			extensions = append(extensions, ext)
+			if !seen[ext] {
+				extensions = append(extensions, ext)
+				seen[ext] = true
+			}
 		}
+		if len(extensions) > 1 {
+			sort.Strings(extensions)
+		}
+	}
+
+	// Оптимизированная обработка паттернов
+	for _, pat := range opts.Patterns {
+		if pat == "" {
+			continue
+		}
+		
+		// Используем кэш для простых паттернов
+		if !containsRegexChars(pat) {
+			var simplePat string
+			if opts.IgnoreCase {
+				patternCache.RLock()
+				if cached, ok := patternCache.lowerCache[pat]; ok {
+					simplePat = cached
+					patternCache.RUnlock()
+				} else {
+					patternCache.RUnlock()
+					simplePat = strings.ToLower(pat)
+					patternCache.Lock()
+					patternCache.lowerCache[pat] = simplePat
+					patternCache.Unlock()
+				}
+			} else {
+				simplePat = pat
+			}
+			simplePatterns = append(simplePatterns, simplePat)
+			continue
+		}
+		
+		// Оптимизированное получение regex из кэша
+		patternStr := regexp.QuoteMeta(pat)
+		if opts.IgnoreCase {
+			patternStr = "(?i)" + patternStr
+		}
+		
+		var re *regexp.Regexp
+		patternCache.RLock()
+		re, ok := patternCache.patterns[patternStr]
+		patternCache.RUnlock()
+		
+		if !ok {
+			re = regexp.MustCompile(patternStr)
+			patternCache.Lock()
+			patternCache.patterns[patternStr] = re
+			patternCache.Unlock()
+		}
+		patterns = append(patterns, re)
 	}
 	
 	return compiledPatterns{
-		patterns:   patterns,
-		extensions: extensions,
+		patterns:       patterns,
+		simplePatterns: simplePatterns,
+		extensions:     extensions,
 	}
+}
+
+// containsRegexChars проверяет, содержит ли строка специальные символы regex
+func containsRegexChars(s string) bool {
+	return strings.ContainsAny(s, "^$.*+?()[]{}|\\")
 }
 
 // matchesPatterns checks if a file matches the compiled patterns
 func matchesPatterns(path string, patterns compiledPatterns, ignoreCase bool) bool {
-	filename := filepath.Base(path)
-	
-	// If no patterns and extensions specified, match all files
-	if len(patterns.patterns) == 0 && len(patterns.extensions) == 0 {
+	if len(patterns.patterns) == 0 && len(patterns.simplePatterns) == 0 && len(patterns.extensions) == 0 {
 		return true
 	}
-	
-	// Check extensions if specified
+
+	// Быстрая проверка расширений
 	if len(patterns.extensions) > 0 {
 		ext := filepath.Ext(path)
 		if ignoreCase {
-			ext = strings.ToLower(ext)
-		}
-		
-		matched := false
-		for _, e := range patterns.extensions {
-			if ext == e {
-				matched = true
-				break
+			patternCache.RLock()
+			if cached, ok := patternCache.lowerCache[ext]; ok {
+				ext = cached
+				patternCache.RUnlock()
+			} else {
+				patternCache.RUnlock()
+				ext = strings.ToLower(ext)
+				patternCache.Lock()
+				patternCache.lowerCache[ext] = ext
+				patternCache.Unlock()
 			}
 		}
 		
-		// If extensions specified but none matched, return false
-		if !matched {
+		if len(patterns.extensions) > 10 {
+			i := sort.SearchStrings(patterns.extensions, ext)
+			if i >= len(patterns.extensions) || patterns.extensions[i] != ext {
+				return false
+			}
+		} else {
+			found := false
+			for _, e := range patterns.extensions {
+				if ext == e {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false
+			}
+		}
+	}
+
+	filename := filepath.Base(path)
+	var lowerFilename string
+	if ignoreCase {
+		patternCache.RLock()
+		if cached, ok := patternCache.lowerCache[filename]; ok {
+			lowerFilename = cached
+			patternCache.RUnlock()
+		} else {
+			patternCache.RUnlock()
+			lowerFilename = strings.ToLower(filename)
+			patternCache.Lock()
+			patternCache.lowerCache[filename] = lowerFilename
+			patternCache.Unlock()
+		}
+	}
+	
+	// Проверка простых паттернов
+	if len(patterns.simplePatterns) > 0 {
+		for _, pattern := range patterns.simplePatterns {
+			if ignoreCase {
+				if strings.Contains(lowerFilename, pattern) {
+					return true
+				}
+			} else {
+				if strings.Contains(filename, pattern) {
+					return true
+				}
+			}
+		}
+		if len(patterns.patterns) == 0 {
 			return false
 		}
 	}
 	
-	// Check patterns if specified
-	if len(patterns.patterns) > 0 {
-		matched := false
-		for _, pattern := range patterns.patterns {
-			if pattern.MatchString(filename) {
-				matched = true
-				break
-			}
+	// Проверка regex паттернов
+	for _, pattern := range patterns.patterns {
+		if pattern.MatchString(filename) {
+			return true
 		}
-		return matched
 	}
 	
-	// If we got here and extensions matched (or none specified), return true
-	return true
+	return false
 }
 
 // matchesFileConstraints checks if file matches size and age constraints

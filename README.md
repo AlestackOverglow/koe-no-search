@@ -197,6 +197,10 @@ For developers who want to integrate Koe no Search into their applications, we p
 - Best Practices
 - Error Handling
 
+## 📖 About
+
+For more information about the project, see the [About](ABOUT_EN.md) file.
+
 ## 🛠️ Technical Details
 
 ### Performance Optimizations
@@ -224,7 +228,7 @@ For developers who want to integrate Koe no Search into their applications, we p
    - Case-folding optimization
    - Priority processing
 
-## 🤝 
+## 🤝 Contributing
 
 1. Keep Koe in app (that anime girl)
 2. Fork the repository
@@ -232,6 +236,8 @@ For developers who want to integrate Koe no Search into their applications, we p
 4. Commit changes (`git commit -m 'Add amazing feature'`)
 5. Push to branch (`git push origin feature/amazing-feature`)
 6. Open Pull Request
+
+Check out the [Future Improvements](ABOUT_EN.md#future-improvements) section in our documentation for a list of planned features and enhancements. Feel free to pick any of these improvements to implement - your contributions are welcome!
 
 ## 📄 License
 

@@ -8,16 +8,14 @@ This document describes the public API of the Koe no Search library, which you c
 - [Core Types](#core-types)
 - [Search Functions](#search-functions)
 - [Error Handling](#error-handling)
-- [Performance Optimization](#performance-optimization)
+- [Performance Features](#performance-features)
 - [Logging System](#logging-system)
 - [GUI Integration](#gui-integration)
 - [File Operations](#file-operations)
 - [Result Handling](#result-handling)
-- [Platform-Specific Notes](#platform-specific-notes)
-- [Advanced Features](#advanced-features)
+- [Platform Support](#platform-support)
 - [Testing](#testing)
 - [Security Considerations](#security-considerations)
-- [Error Handling Extensions](#error-handling-extensions)
 
 ## Installation
 
@@ -237,214 +235,18 @@ type ProcessorOptions struct {
 
 ### Performance Features
 
-#### Buffer Management
+#### Memory Management and Pattern Matching
 ```go
-// Regular buffer pool (32KB buffers)
-var bufferPool = sync.Pool{
-    New: func() interface{} {
-        return make([]byte, 32*1024)
-    },
-}
-
-// Large file buffer pool (1MB buffers)
-var mmapPool = sync.Pool{
-    New: func() interface{} {
-        return make([]byte, 1024*1024)
-    },
-}
-```
-
-#### Priority Processing
-```go
-// Priority queues
+// Global buffer pools
 var (
-    highPriorityPaths   = make(chan string, 10000)
-    normalPriorityPaths = make(chan string, 10000)
-    lowPriorityPaths   = make(chan string, 10000)
-)
-```
-
-Files are processed according to their priority:
-1. High priority (PriorityDirs)
-2. Normal priority (default)
-3. Low priority (LowPriorityDirs)
-
-#### Directory Skipping
-```go
-// Common directories to skip
-var skipDirs = map[string]bool{
-    "node_modules": true,
-    ".git": true,
-    "target": true,
-    "dist": true,
-    // ... other system directories
-}
-```
-
-### Error Handling
-
-#### Result Processing
-```go
-type SearchResult struct {
-    Path      string      // Full path to the file
-    Size      int64       // File size in bytes
-    Mode      os.FileMode // File mode and permissions
-    ModTime   time.Time   // Last modification time
-    Hash      uint64      // Quick hash for deduplication
-    Error     error       // Error if occurred during processing
-}
-```
-
-#### Error Recovery
-- Panic recovery in worker goroutines
-- Safe hash calculation with recovery
-- Graceful error reporting through SearchResult
-
-### Platform Support
-
-#### Windows
-- Case-insensitive path handling
-- UNC path support
-- System directory exclusions
-
-#### Unix/Linux
-- Case-sensitive path handling
-- Symbolic link support
-- Hidden file handling (.dotfiles)
-
-### Current Limitations
-- No content-based search
-- Limited archive file support
-- Basic file operation recovery
-- Simple pattern matching (no regex)
-- Limited network drive optimization
-
-## Search Functions
-
-### Basic Search
-```go
-// Perform a basic search with default options
-results := search.Search(opts)
-```
-
-### Result Processing
-```go
-// Create result buffer for efficient updates
-buffer := NewResultBuffer(foundFiles, virtualList)
-
-// Add results to buffer
-for result := range results {
-    if result.Error != nil {
-        continue
-    }
-    buffer.Add(FileListItem{
-        Path: result.Path,
-        Size: result.Size,
-    })
-}
-
-// Flush remaining items
-buffer.Flush()
-```
-
-### Search Cancellation
-```go
-// Create cancellable search
-stopChan := make(chan struct{})
-opts.StopChan = stopChan
-
-// Start search in goroutine
-go func() {
-    results := search.Search(opts)
-    // Process results...
-}()
-
-// Cancel search after timeout
-time.AfterFunc(5*time.Minute, func() {
-    close(stopChan)
-})
-```
-
-## Error Handling
-
-### Error Types and Recovery
-```go
-// Define custom errors
-type SearchError struct {
-    Path string
-    Op   string
-    Err  error
-}
-
-func (e *SearchError) Error() string {
-    return fmt.Sprintf("%s: %s: %v", e.Op, e.Path, e.Err)
-}
-
-// Common error types
-var (
-    ErrAccessDenied   = errors.New("access denied")
-    ErrNotFound       = errors.New("file not found")
-    ErrInvalidPattern = errors.New("invalid search pattern")
-    ErrCancelled      = errors.New("search cancelled")
-)
-
-// Error aggregation
-type ErrorList struct {
-    Errors []error
-    mu     sync.Mutex
-}
-
-func (e *ErrorList) Add(err error) {
-    e.mu.Lock()
-    e.Errors = append(e.Errors, err)
-    e.mu.Unlock()
-}
-```
-
-### Error Recovery and Safety
-```go
-// Recover from panics in search operations
-func recoverSearch(results chan<- SearchResult) {
-    if r := recover(); r != nil {
-        results <- SearchResult{
-            Error: fmt.Errorf("search panic: %v", r),
-        }
-        close(results)
-    }
-}
-
-// Safe file operations with validation
-func SafeCopyFile(src, dst string) error {
-    // Validate paths
-    if err := validatePaths(src, dst); err != nil {
-        return err
-    }
-    
-    // Copy with temp file
-    tmpDst := dst + ".tmp"
-    if err := copyFile(src, tmpDst); err != nil {
-        os.Remove(tmpDst)
-        return err
-    }
-    
-    return os.Rename(tmpDst, dst)
-}
-```
-
-## Performance Optimization
-
-### Memory Management and Buffering
-```go
-// Buffer pools for different operations
-var (
-    // Regular operations buffer pool (32KB)
+    // Regular buffer pool (32KB)
     bufferPool = sync.Pool{
         New: func() interface{} {
             return make([]byte, 32*1024)
         },
     }
-
-    // Memory mapping buffer pool (1MB)
+    
+    // Large file buffer pool (1MB)
     mmapPool = sync.Pool{
         New: func() interface{} {
             return make([]byte, 1024*1024)
@@ -452,26 +254,7 @@ var (
     }
 )
 
-// Result buffer configuration
-type ResultBuffer struct {
-    items            []FileListItem
-    foundFiles       *[]FileListItem
-    list            *VirtualFileList
-    minUpdateInterval time.Duration
-    batchSize        int
-}
-
-// Buffer optimization strategies:
-// - Reuse buffers to reduce allocations
-// - Size-specific buffer pools
-// - Automatic buffer cleanup
-// - Adaptive buffer sizes
-// - Memory pressure handling
-```
-
-### Pattern Matching and Search
-```go
-// Optimized pattern matching
+// Pattern matching optimization
 type compiledPatterns struct {
     simplePatterns [][]byte           // Compiled search patterns
     extensions     [][]byte           // Compiled extensions
@@ -479,7 +262,13 @@ type compiledPatterns struct {
     commonPatterns map[string]struct{} // Frequently used patterns
 }
 
-// Pattern matching features:
+// Pattern cache
+var patternCache struct {
+    sync.RWMutex
+    lowerCache map[string][]byte
+}
+
+// Features:
 // - Pattern pre-compilation
 // - Common pattern caching
 // - Case folding optimization
@@ -496,16 +285,9 @@ func walkDirectoryOptimized(dir string, paths chan<- string, opts SearchOptions)
     // Features:
     // - Concurrent subdirectory processing
     // - Directory entry batching
-    // - Skip pattern optimization
     // - Memory-efficient traversal
     // - Priority-based processing
 }
-
-// Batch processing configuration
-const (
-    defaultBatchSize = 1000
-    maxBatchSize    = 5000
-)
 
 // Skip common directories
 var skipDirs = map[string]bool{
@@ -514,6 +296,13 @@ var skipDirs = map[string]bool{
     "target":      true,
     "dist":        true,
 }
+
+// Priority processing
+var (
+    highPriorityPaths   = make(chan string, 10000)
+    normalPriorityPaths = make(chan string, 10000)
+    lowPriorityPaths    = make(chan string, 10000)
+)
 ```
 
 ## Logging System
@@ -661,48 +450,44 @@ if len(search.BackgroundData) > 0 {
 
 ## File Operations
 
-### File Operation Types
+### Core Operations
 ```go
+// Operation types
 const (
     OperationCopy = iota
     OperationMove
     OperationDelete
 )
-```
 
-### Basic Operations
-```go
-// Copy files
-err := fileOp.CopyFiles(selectedFiles, targetDir, progressCallback)
+// Basic operations
+func CopyFiles(files []string, targetDir string, progressCallback func(current, total int, path string)) error
+func MoveFiles(files []string, targetDir string, progressCallback func(current, total int, path string)) error
+func DeleteFiles(files []string, progressCallback func(current, total int, path string)) error
 
-// Move files
-err := fileOp.MoveFiles(selectedFiles, targetDir, progressCallback)
-
-// Delete files
-err := fileOp.DeleteFiles(selectedFiles, progressCallback)
-```
-
-### Progress Tracking
-```go
-// Progress callback
-progressCallback := func(current, total int, path string) {
-    progress := float64(current) / float64(total)
-    progressBar.SetValue(progress)
-    statusLabel.SetText(fmt.Sprintf("Processing: %s", path))
+// Operation processor
+type ProcessorOptions struct {
+    Workers          int
+    MaxQueueSize     int
+    ThrottleInterval time.Duration
 }
+
+// Create processor
+processor := NewFileOperationProcessor(ProcessorOptions{
+    Workers:          runtime.NumCPU() / 2,
+    MaxQueueSize:     1000,
+    ThrottleInterval: 100 * time.Millisecond,
+})
 ```
 
-### Operation Validation
+### Operation Safety
 ```go
 // Validate operation
 func validateOperation(files []string, targetDir string) error {
     for _, file := range files {
-        // Check if source exists
         if _, err := os.Stat(file); err != nil {
             return fmt.Errorf("source file not found: %s", file)
         }
         
-        // Check target path
         targetPath := filepath.Join(targetDir, filepath.Base(file))
         if _, err := os.Stat(targetPath); err == nil {
             return fmt.Errorf("target file already exists: %s", targetPath)
@@ -710,11 +495,8 @@ func validateOperation(files []string, targetDir string) error {
     }
     return nil
 }
-```
 
-### Error Recovery
-```go
-// Implement operation rollback
+// Operation rollback
 type OperationLog struct {
     SourcePath string
     TargetPath string
@@ -822,249 +604,22 @@ func sortResults(results []FileListItem, by SortBy) {
 }
 ```
 
-## Platform-Specific Notes
+## Platform Support
 
 ### Windows
 - File paths are case-insensitive by default
 - UNC paths are supported
-- Network drives may require additional permissions
+- System directory exclusions
 
 ### Linux/Unix
 - File paths are case-sensitive by default
-- Symbolic links are not followed by default
-- Hidden files (starting with '.') are included in search
+- Symbolic link support
+- Hidden file handling (.dotfiles)
 
 ### macOS
 - File paths are case-insensitive by default
 - Resource forks are ignored
 - Bundle contents are searchable
-
-## Advanced Features
-
-### Priority Search
-```go
-// Configure priority search
-opts := SearchOptions{
-    PriorityDirs: []string{
-        "/important/dir1",
-        "/important/dir2",
-    },
-    LowPriorityDirs: []string{
-        "/archive",
-        "/temp",
-    },
-}
-
-// Files are processed in order:
-// 1. High priority (PriorityDirs)
-// 2. Normal priority (default)
-// 3. Low priority (LowPriorityDirs)
-```
-
-#### Caching System
-```go
-// Enable pre-indexing for faster subsequent searches
-opts := SearchOptions{
-    UsePreIndexing: true,
-    IndexPath: "/path/to/index",
-}
-
-// Cache stores:
-// - Directory contents
-// - File metadata
-// - Hash values for deduplication
-// - Common patterns
-```
-
-#### Batch Processing
-```go
-// Configure batch processing
-opts := SearchOptions{
-    BatchSize: 1000,  // Process files in batches
-    BufferSize: 5000, // Larger buffer for results
-}
-
-// Batch processing benefits:
-// - Reduced memory allocation
-// - Better I/O performance
-// - Efficient worker utilization
-```
-
-#### Memory Mapping
-```go
-// Enable memory mapping for large files
-opts := SearchOptions{
-    UseMMap: true,
-    MinMMapSize: 100 * 1024 * 1024, // 100MB
-}
-
-// Memory mapping benefits:
-// - Faster file access
-// - Reduced memory usage
-// - Better performance for large files
-```
-
-### Performance Optimization
-
-#### Buffer Management
-```go
-// Global buffer pools
-var (
-    // Regular buffer pool (32KB buffers)
-    bufferPool = sync.Pool{
-        New: func() interface{} {
-            return make([]byte, 32*1024)
-        },
-    }
-    
-    // Large file buffer pool (1MB buffers)
-    mmapPool = sync.Pool{
-        New: func() interface{} {
-            return make([]byte, 1024*1024)
-        },
-    }
-)
-
-// Buffer optimization strategies:
-// - Reuse buffers to reduce allocations
-// - Size-specific buffer pools
-// - Automatic buffer cleanup
-```
-
-#### Pattern Matching
-```go
-// Optimized pattern matching
-type compiledPatterns struct {
-    simplePatterns [][]byte
-    extensions     [][]byte
-    ignoreCase     bool
-    commonPatterns map[string]struct{}
-}
-
-// Pattern matching features:
-// - Pre-compiled patterns
-// - Case-sensitivity optimization
-// - Common pattern caching
-// - Extension-first matching
-```
-
-#### Directory Walking
-```go
-// Optimized directory traversal
-func walkDirectoryOptimized(dir string, paths chan<- string, opts SearchOptions) {
-    // Features:
-    // - Batch processing of entries
-    // - Concurrent subdirectory processing
-    // - Memory-efficient traversal
-    // - Priority-based processing
-}
-
-// Configure concurrent processing
-opts := SearchOptions{
-    MaxWorkers: runtime.NumCPU() * 2,  // More workers for I/O-bound operations
-}
-```
-
-#### File Operations
-```go
-// Processor options for file operations
-type ProcessorOptions struct {
-    Workers          int           // Number of concurrent workers
-    MaxQueueSize     int           // Maximum queued operations
-    ThrottleInterval time.Duration // Interval between operations
-}
-
-// Create file operation processor
-processor := NewFileOperationProcessor(ProcessorOptions{
-    Workers:          runtime.NumCPU() / 2,
-    MaxQueueSize:     1000,
-    ThrottleInterval: 100 * time.Millisecond,
-})
-
-// Features:
-// - Concurrent processing
-// - Operation throttling
-// - Automatic worker scaling
-// - Error recovery
-// - Progress tracking
-```
-
-### Error Handling
-
-#### Operation Errors
-```go
-// File operation error handling
-func HandleFileOperation(path string, opts FileOperationOptions) error {
-    // Pre-operation checks:
-    // - File accessibility
-    // - Directory permissions
-    // - Disk space
-    // - File locks
-    
-    // Error recovery:
-    // - Temporary file cleanup
-    // - Partial operation rollback
-    // - Error logging
-}
-```
-
-#### Safe File Operations
-```go
-// Safe file copy with validation
-func copyFile(src string, opts FileOperationOptions, srcInfo os.FileInfo) error {
-    // Safety features:
-    // - Atomic operations
-    // - Temporary file usage
-    // - Checksum verification
-    // - Permission preservation
-    // - Error recovery
-}
-
-// Conflict resolution
-func resolveConflict(path string, policy ConflictResolutionPolicy) string {
-    // Resolution strategies:
-    // - Skip existing files
-    // - Overwrite files
-    // - Rename with timestamp
-    // - Random suffix generation
-}
-```
-
-### Logging System
-
-#### Log Levels and Configuration
-```go
-// Log configuration
-const (
-    maxLogSize      = 10 * 1024 * 1024 // 10MB
-    logBufferSize   = 32 * 1024        // 32KB
-    maxLogRotations = 5
-)
-
-// Logging features:
-// - Asynchronous logging
-// - Log rotation
-// - Buffer management
-// - Level-based filtering
-```
-
-#### Performance Logging
-```go
-// Log performance metrics
-type SearchMetrics struct {
-    FilesProcessed   int64
-    BytesProcessed   int64
-    ErrorCount       int64
-    ProcessingTime   time.Duration
-    MemoryUsage      int64
-}
-
-// Metric collection:
-// - File processing stats
-// - Memory usage tracking
-// - Error counting
-// - Timing measurements
-```
 
 ## Testing
 
@@ -1179,9 +734,9 @@ func SanitizePath(path string) string {
 }
 ```
 
-## Error Handling Extensions
+## Error Handling
 
-### Custom Error Types
+### Error Types and Recovery
 ```go
 // Define custom errors
 type SearchError struct {
@@ -1194,27 +749,15 @@ func (e *SearchError) Error() string {
     return fmt.Sprintf("%s: %s: %v", e.Op, e.Path, e.Err)
 }
 
-func (e *SearchError) Unwrap() error {
-    return e.Err
-}
-```
+// Common error types
+var (
+    ErrAccessDenied   = errors.New("access denied")
+    ErrNotFound       = errors.New("file not found")
+    ErrInvalidPattern = errors.New("invalid search pattern")
+    ErrCancelled      = errors.New("search cancelled")
+)
 
-### Error Recovery
-```go
-// Recover from panics
-func recoverSearch(results chan<- SearchResult) {
-    if r := recover(); r != nil {
-        results <- SearchResult{
-            Error: fmt.Errorf("search panic: %v", r),
-        }
-        close(results)
-    }
-}
-```
-
-### Error Aggregation
-```go
-// Aggregate multiple errors
+// Error aggregation
 type ErrorList struct {
     Errors []error
     mu     sync.Mutex
@@ -1226,160 +769,37 @@ func (e *ErrorList) Add(err error) {
     e.mu.Unlock()
 }
 
-func (e *ErrorList) Error() string {
-    return fmt.Sprintf("%d errors occurred", len(e.Errors))
-}
-```
-
-### Caching System Implementation
-
-#### Cache Structure
-```go
-// Cache stores directory contents for faster subsequent searches
-type Cache struct {
-    entries     map[string]*DirEntry    // Cached directory entries
-    metadata    map[string]FileMetadata // File metadata cache
-    hashes      map[uint64]bool         // Deduplication cache
-    lastUpdate  time.Time               // Last cache update time
-    maxAge      time.Duration           // Cache expiration time
+// Error recovery and safety
+func recoverSearch(results chan<- SearchResult) {
+    if r := recover(); r != nil {
+        results <- SearchResult{
+            Error: fmt.Errorf("search panic: %v", r),
+        }
+        close(results)
+    }
 }
 
-// DirEntry represents a cached directory entry
-type DirEntry struct {
-    entry    fs.DirEntry    // Original directory entry
-    modTime  time.Time      // Last modification time
-    size     int64          // Directory size
-    children []*DirEntry    // Subdirectories and files
-}
-
-// FileMetadata stores file metadata for quick comparison
-type FileMetadata struct {
-    Size     int64
-    ModTime  time.Time
-    DeviceID uint64
-    InodeID  uint64
-}
-```
-
-#### Cache Management
-```go
-// Create new cache instance
-cache := newCache()
-
-// Cache configuration
-const (
-    defaultMaxAge = 5 * time.Minute
-    maxCacheSize  = 100000  // Maximum number of entries
-)
-
-// Cache operations
-func (c *Cache) get(dir string) (*DirEntry, bool)
-func (c *Cache) set(dir string, entry *DirEntry)
-func (c *Cache) clear()
-```
-
-#### Directory Statistics
-```go
-// DirStats stores directory statistics
-type DirStats struct {
-    FileCount     int
-    TotalSize     int64
-    LastModified  time.Time
-    CommonExts    map[string]int
-    UpdateCount   int64
-}
-
-// FileIndex stores pre-built file information
-type FileIndex struct {
-    Files     map[string]*FileMetadata
-    DirStats  map[string]*DirStats
-    LastBuild time.Time
-}
-```
-
-### Performance Optimizations
-
-#### Bloom Filters
-```go
-type BloomFilter struct {
-    bits    []bool
-    numBits uint
-    numHash uint
-}
-
-type BloomFilterOptions struct {
-    ExpectedItems uint    // Expected number of items
-    FalsePositive float64 // Acceptable false positive rate
-}
-
-type FileFilterSet struct {
-    Extensions *BloomFilter // Filter for file extensions
-    Paths      *BloomFilter // Filter for file paths
-    Dirs       *BloomFilter // Filter for processed directories
-    mu         sync.RWMutex
-}
-```
-
-Bloom filters are used for efficient set membership testing:
-- Extensions filter: 1000 items, 0.1% false positive rate
-- Paths filter: 100k items, 0.1% false positive rate
-- Directories filter: 10k items, 0.1% false positive rate
-
-#### Virtual List
-```go
-type VirtualFileList struct {
-    widget.BaseWidget
-    list        *widget.List
-    items       *[]FileListItem
-    cache       *SimpleCache
-    scroller    *container.Scroll
-    resultBuf   *ResultBuffer
+// Safe file operations with validation
+func SafeCopyFile(src, dst string) error {
+    // Validate paths
+    if err := validatePaths(src, dst); err != nil {
+        return err
+    }
     
-    // Performance settings
-    maxCacheSize     int
-    visibleBuffer    int
-    updateBatchSize  int
-    updateInterval   time.Duration
-}
-
-type SimpleCache struct {
-    items map[int]string
-    mutex sync.RWMutex
+    // Copy with temp file
+    tmpDst := dst + ".tmp"
+    if err := copyFile(src, tmpDst); err != nil {
+        os.Remove(tmpDst)
+        return err
+    }
+    
+    return os.Rename(tmpDst, dst)
 }
 ```
 
-The virtual list provides efficient display of large result sets:
-- Lazy loading of visible items
-- Chunked data storage
-- Smooth scrolling support
-- Efficient memory usage
+## Performance Features
 
-#### Result Buffer
-```go
-type ResultBuffer struct {
-    items      []FileListItem
-    mu         sync.Mutex
-    foundFiles *[]FileListItem
-    list       *VirtualFileList
-    
-    // Chunked storage
-    chunks     [][]FileListItem
-    chunkSize  int
-    totalItems int
-    
-    // Update thresholds
-    minUpdateInterval time.Duration
-    batchSize        int
-}
-```
-
-Result buffer features:
-- Chunked storage (50k items per chunk)
-- Adaptive update intervals
-- Batch processing
-- Memory-efficient storage
-
-### Memory Management
+### Memory Management and Pattern Matching
 ```go
 // Global buffer pools
 var (
@@ -1397,106 +817,55 @@ var (
         },
     }
 )
-```
 
-#### Directory Caching
-```go
-type Cache struct {
-    entries     map[string]*DirEntry
-    metadata    map[string]FileMetadata
-    hashes      map[uint64]bool
-    lastUpdate  time.Time
-    maxAge      time.Duration
+// Pattern matching optimization
+type compiledPatterns struct {
+    simplePatterns [][]byte           // Compiled search patterns
+    extensions     [][]byte           // Compiled extensions
+    ignoreCase     bool              // Case sensitivity flag
+    commonPatterns map[string]struct{} // Frequently used patterns
 }
 
-type DirEntry struct {
-    entry    fs.DirEntry
-    modTime  time.Time
-    size     int64
-    children []*DirEntry
+// Pattern cache
+var patternCache struct {
+    sync.RWMutex
+    lowerCache map[string][]byte
 }
 
-type DirStats struct {
-    FileCount     int
-    TotalSize     int64
-    LastModified  time.Time
-    CommonExts    map[string]int
-    UpdateCount   int64
+// Features:
+// - Pattern pre-compilation
+// - Common pattern caching
+// - Case folding optimization
+// - Extension-first matching
+// - Regular expression support
+// - Multiple pattern groups
+// - Parallel pattern matching
+```
+
+### Directory Walking and Processing
+```go
+// Optimized directory traversal
+func walkDirectoryOptimized(dir string, paths chan<- string, opts SearchOptions) {
+    // Features:
+    // - Concurrent subdirectory processing
+    // - Directory entry batching
+    // - Memory-efficient traversal
+    // - Priority-based processing
 }
-```
 
-### Result Processing
-
-#### Batch Processing
-```go
-type BatchProcessor struct {
-    batch    []string
-    size     int
-    callback func([]string)
+// Skip common directories
+var skipDirs = map[string]bool{
+    "node_modules": true,
+    ".git":        true,
+    "target":      true,
+    "dist":        true,
 }
+
+// Priority processing
+var (
+    highPriorityPaths   = make(chan string, 10000)
+    normalPriorityPaths = make(chan string, 10000)
+    lowPriorityPaths    = make(chan string, 10000)
+)
 ```
-
-Batch processing features:
-- Configurable batch size
-- Memory-efficient processing
-- Automatic flushing
-
-#### Result Processor
-```go
-type resultProcessor struct {
-    results  chan<- SearchResult
-    seen     map[uint64]bool
-    dedupe   bool
-    mu       sync.Mutex
-}
-```
-
-Result processor features:
-- Deduplication support
-- Thread-safe processing
-- Efficient result delivery
-
-### File Operations
-
-#### Operation Processor
-```go
-type ProcessorOptions struct {
-    Workers          int
-    MaxQueueSize     int
-    ThrottleInterval time.Duration
-}
-```
-
-File operation features:
-- Concurrent processing
-- Operation throttling
-- Progress tracking
-- Error handling
-
-### Utility Functions
-
-#### Size Parsing
-```go
-// Parse size strings (e.g., "1KB", "1.5MB", "2GB")
-func ParseSize(s string) (int64, error)
-```
-
-#### Age Parsing
-```go
-// Parse age strings (e.g., "1h", "2d", "1w", "1m")
-func ParseAge(s string) (time.Duration, error)
-```
-
-#### List Parsing
-```go
-// Split comma-separated strings
-func SplitCommaList(s string) []string
-```
-
-### Current Limitations
-- No content-based search
-- Limited archive file support
-- Basic file operation recovery
-- Simple pattern matching (no regex)
-- Limited network drive optimization
 

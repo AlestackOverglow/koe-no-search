@@ -1,4 +1,7 @@
 # Koe no Search
+<p align="center">
+  <img width="160" height="160" src="https://github.com/AlestackOverglow/koe-no-search/raw/main/koe.png">
+</p>
 
 <div align="center">
 
@@ -7,8 +10,6 @@
 [![Go Version](https://img.shields.io/badge/Go-1.21%2B-blue.svg)](https://golang.org/dl/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)]()
-
-![Koe no Search Screenshot](screenshot.png)
 
 </div>
 
@@ -40,7 +41,7 @@
    - GUI version: `koe-no-search-gui`
    - CLI version: `koe-no-search-cli -p "*.txt" /path/to/search`
 3. Start searching!
-
+<img src="screenshot.png">
 ## ✨ Key Features
 
 - 🔍 Instant search without indexing

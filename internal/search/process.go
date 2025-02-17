@@ -26,11 +26,11 @@ func processRegularFile(path string, info os.FileInfo, patterns compiledPatterns
 	// Check if file exists and is not a symlink
 	fi, err := os.Lstat(path)
 	if err != nil {
-		logDebug("File no longer exists or inaccessible: %s: %v", path, err)
+		
 		return
 	}
 	if fi.Mode()&os.ModeSymlink != 0 {
-		logDebug("Skipping symbolic link: %s", path)
+		
 		return
 	}
 
@@ -176,7 +176,7 @@ const (
 	minBufferSize     = 4096
 	defaultBufferSize = 128 * 1024  // 128KB default
 	maxBufferSize     = 1024 * 1024 // 1MB max
-	maxPoolSize       = 32          // Максимальное количество буферов в пуле
+	maxPoolSize       = 32          // Maximum number of buffers in the pool
 	
 	// Platform-specific O_DIRECT values
 	linuxODirect   = 0x4000   // Linux
@@ -233,7 +233,7 @@ func optimizeBufferSize(fileSize int64) int {
 	}
 }
 
-// enableDirectIO attempts to enable direct I/O on supported platforms
+// TODO enableDirectIO attempts to enable direct I/O on supported platforms 
 func enableDirectIO(file *os.File) {
 	// Direct I/O is handled differently on each platform:
 	// - Windows: Must be set when opening the file (FILE_FLAG_NO_BUFFERING)
@@ -276,24 +276,24 @@ func copyFile(src string, opts FileOperationOptions, srcInfo os.FileInfo) error 
 		return nil
 	}
 
-	// Проверяем размер файла
+	// Check file size
 	size := srcInfo.Size()
 	if size == 0 {
 		return copyEmptyFile(src, targetPath, srcInfo.Mode())
 	}
 
-	// Получаем буфер из пула
+	// Get buffer from pool
 	buf := copyBufferPool.Get()
 	defer copyBufferPool.Put(buf)
 
-	// Открываем исходный файл
+	// Open source file
 	srcFile, err := os.OpenFile(src, os.O_RDONLY, 0)
 	if err != nil {
 		return fmt.Errorf("failed to open source: %v", err)
 	}
 	defer srcFile.Close()
 
-	// Создаем временный файл
+	// Create temporary file
 	tmpPath := targetPath + ".tmp"
 	dstFile, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, srcInfo.Mode())
 	if err != nil {
@@ -307,7 +307,7 @@ func copyFile(src string, opts FileOperationOptions, srcInfo os.FileInfo) error 
 		}
 	}()
 
-	// Копируем данные
+	// Copy data
 	written, err := io.CopyBuffer(dstFile, srcFile, buf)
 	if err != nil {
 		dstFile.Close()
@@ -328,7 +328,7 @@ func copyFile(src string, opts FileOperationOptions, srcInfo os.FileInfo) error 
 		return fmt.Errorf("close failed: %v", err)
 	}
 
-	// Атомарное переименование
+	// Atomic rename
 	if err := os.Rename(tmpPath, targetPath); err != nil {
 		return fmt.Errorf("rename failed: %v", err)
 	}
@@ -434,7 +434,7 @@ type FileOperationProcessor struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	
-	// Новые поля для контроля нагрузки
+	// New fields for load control
 	maxQueueSize   int
 	currentWorkers int32
 	maxWorkers     int32
@@ -463,7 +463,7 @@ func NewFileOperationProcessor(opts ProcessorOptions) *FileOperationProcessor {
 	return &FileOperationProcessor{
 		opChan:         make(chan fileOperation, opts.MaxQueueSize),
 		workers:        opts.Workers,
-		maxWorkers:     int32(opts.Workers * 2), // Позволяем удвоить количество при необходимости
+		maxWorkers:     int32(opts.Workers * 2), // Allow doubling the number of workers if needed
 		stopChan:       make(chan struct{}),
 		ctx:           ctx,
 		cancel:        cancel,
@@ -532,19 +532,19 @@ func (p *FileOperationProcessor) Add(path string, opts FileOperationOptions, inf
 	}
 	p.mu.Unlock()
 
-	// Применяем throttling
+	// Apply throttling
 	<-p.throttle.C
 
 	select {
 	case p.opChan <- fileOperation{path, opts, info}:
-		logDebug("Queued file operation for %s", path)
+		
 		return nil
 	case <-p.stopChan:
 		return fmt.Errorf("processor is stopping")
 	case <-p.ctx.Done():
 		return fmt.Errorf("processor context cancelled")
 	default:
-		// Пытаемся адаптивно увеличить количество воркеров
+		// Try to adaptively increase number of workers
 		if atomic.LoadInt32(&p.currentWorkers) < p.maxWorkers {
 			p.mu.Lock()
 			if !p.stopped {
@@ -617,7 +617,7 @@ func checkDiskSpace(path string, size int64) error {
 			os.Remove(tmpPath)
 		}()
 
-		// Проверяем минимальный размер или 1MB, что меньше
+		// Check minimum size or 1MB, whichever is smaller
 		checkSize := int64(1024 * 1024)
 		if size < checkSize {
 			checkSize = size

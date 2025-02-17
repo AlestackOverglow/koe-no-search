@@ -13,7 +13,7 @@ import (
 	"github.com/cespare/xxhash"
 )
 
-// Структуры для работы с паттернами
+// Structures for pattern matching
 type compiledPatterns struct {
 	patterns       []*regexp.Regexp
 	simplePatterns []string
@@ -25,7 +25,7 @@ var patternCache struct {
 	sync.RWMutex
 	patterns       map[string]*regexp.Regexp
 	simplePatterns map[string]string
-	lowerCache     map[string]string // Кэш для преобразования в нижний регистр
+	lowerCache     map[string]string // Cache for lowercase conversion
 }
 
 func init() {
@@ -65,7 +65,7 @@ func preparePatterns(opts SearchOptions) compiledPatterns {
 	patterns := make([]*regexp.Regexp, 0, len(opts.Patterns))
 	simplePatterns := make([]string, 0, len(opts.Patterns))
 	
-	// Предварительно сортируем расширения один раз
+	// Pre-sort extensions once
 	extensions := make([]string, 0, len(opts.Extensions))
 	if len(opts.Extensions) > 0 {
 		seen := make(map[string]bool, len(opts.Extensions))
@@ -89,13 +89,13 @@ func preparePatterns(opts SearchOptions) compiledPatterns {
 		}
 	}
 
-	// Оптимизированная обработка паттернов
+	// Optimized pattern processing
 	for _, pat := range opts.Patterns {
 		if pat == "" {
 			continue
 		}
 		
-		// Используем кэш для простых паттернов
+		// Use cache for simple patterns
 		if !containsRegexChars(pat) {
 			var simplePat string
 			if opts.IgnoreCase {
@@ -117,7 +117,7 @@ func preparePatterns(opts SearchOptions) compiledPatterns {
 			continue
 		}
 		
-		// Оптимизированное получение regex из кэша
+		// Optimized regex cache retrieval
 		patternStr := regexp.QuoteMeta(pat)
 		if opts.IgnoreCase {
 			patternStr = "(?i)" + patternStr
@@ -144,7 +144,7 @@ func preparePatterns(opts SearchOptions) compiledPatterns {
 	}
 }
 
-// containsRegexChars проверяет, содержит ли строка специальные символы regex
+// containsRegexChars checks if the string contains special regex characters
 func containsRegexChars(s string) bool {
 	return strings.ContainsAny(s, "^$.*+?()[]{}|\\")
 }
@@ -155,7 +155,7 @@ func matchesPatterns(path string, patterns compiledPatterns, ignoreCase bool) bo
 		return true
 	}
 
-	// Быстрая проверка расширений
+	// Fast extension check
 	if len(patterns.extensions) > 0 {
 		ext := filepath.Ext(path)
 		if ignoreCase {
@@ -207,7 +207,7 @@ func matchesPatterns(path string, patterns compiledPatterns, ignoreCase bool) bo
 		}
 	}
 	
-	// Проверка простых паттернов
+	// Check simple patterns
 	if len(patterns.simplePatterns) > 0 {
 		for _, pattern := range patterns.simplePatterns {
 			if ignoreCase {
@@ -225,7 +225,7 @@ func matchesPatterns(path string, patterns compiledPatterns, ignoreCase bool) bo
 		}
 	}
 	
-	// Проверка regex паттернов
+	// Check regex patterns
 	for _, pattern := range patterns.patterns {
 		if pattern.MatchString(filename) {
 			return true
@@ -239,22 +239,22 @@ func matchesPatterns(path string, patterns compiledPatterns, ignoreCase bool) bo
 func matchesFileConstraints(info os.FileInfo, opts SearchOptions) bool {
 	// Check file size constraints
 	if opts.MinSize > 0 && info.Size() < opts.MinSize {
-		logDebug("File too small: %s (%d bytes)", info.Name(), info.Size())
+	
 		return false
 	}
 	if opts.MaxSize > 0 && info.Size() > opts.MaxSize {
-		logDebug("File too large: %s (%d bytes)", info.Name(), info.Size())
+		
 		return false
 	}
 	
 	// Check file age constraints
 	age := time.Since(info.ModTime())
 	if opts.MinAge > 0 && age < opts.MinAge {
-		logDebug("File too new: %s (age: %v)", info.Name(), age)
+		
 		return false
 	}
 	if opts.MaxAge > 0 && age > opts.MaxAge {
-		logDebug("File too old: %s (age: %v)", info.Name(), age)
+		
 		return false
 	}
 	
@@ -287,7 +287,7 @@ func processByMMap(path string, info os.FileInfo, patterns compiledPatterns, opt
 			ModTime: info.ModTime(),
 			Hash:    hash,
 		})
-		logDebug("Successfully processed file with mmap: %s", path)
+		
 	}
 	
 	return nil
@@ -320,14 +320,14 @@ func shouldProcessFile(path string, opts SearchOptions) bool {
 	if opts.ExcludeHidden {
 		base := filepath.Base(path)
 		if strings.HasPrefix(base, ".") {
-			logDebug("Skipping hidden file: %s", path)
+		
 			return false
 		}
 	}
 	
 	ext := strings.ToLower(filepath.Ext(path))
 	if skipExtensions[ext] {
-		logDebug("Skipping file with excluded extension: %s", path)
+		
 		return false
 	}
 	
@@ -346,7 +346,7 @@ func shouldProcessFile(path string, opts SearchOptions) bool {
 				}
 			}
 			if !matched {
-				logDebug("File does not match any patterns (case-insensitive): %s", path)
+				
 				return false
 			}
 		} else {
@@ -360,7 +360,7 @@ func shouldProcessFile(path string, opts SearchOptions) bool {
 				}
 			}
 			if !matched {
-				logDebug("File does not match any patterns (case-sensitive): %s", path)
+				
 				return false
 			}
 		}

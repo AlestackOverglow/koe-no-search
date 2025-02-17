@@ -42,6 +42,7 @@
    - CLI version: `koe-no-search-cli -p "*.txt" /path/to/search`
 3. Start searching!
 <img src="screenshot.png">
+
 ## ✨ Key Features
 
 - 🔍 Instant search without indexing
@@ -78,14 +79,14 @@
 | No Background Service    | ✅            | ❌         | ✅            | ❌             |
 | Portable                 | ✅            | ✅         | ❌            | ❌             |
 
-\* Search speed measured on Windows 10, Intel i7, 16GB RAM, SSD, searching through 1 million files (mixed sizes) in system directories. First search after system startup, no indexing.
+\* Search speed measured on Windows 10, Intel i5, 16GB RAM, SSD, searching through 1 million files (mixed sizes) in system directories. First search after system startup, no indexing.
 
 ## 🔧 System Requirements
 
 ### Minimum Requirements
 - RAM: 256MB
 - CPU: Dual-core processor
-- Disk Space: 20MB
+- Disk Space: 40MB
 - OS: Windows 7+, Ubuntu 18.04+, macOS 10.13+
 
 ### Recommended
@@ -223,13 +224,14 @@ For developers who want to integrate Koe no Search into their applications, we p
    - Case-folding optimization
    - Priority processing
 
-## 🤝 Contributing
+## 🤝 
 
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
+1. Keep Koe in app (that anime girl)
+2. Fork the repository
+3. Create feature branch (`git checkout -b feature/amazing-feature`)
+4. Commit changes (`git commit -m 'Add amazing feature'`)
+5. Push to branch (`git push origin feature/amazing-feature`)
+6. Open Pull Request
 
 ## 📄 License
 

@@ -18,7 +18,7 @@ const (
 	ERROR
 )
 
-// Оптимизированные константы для логгера
+// Optimized logger constants
 const (
 	maxLogSize       = 10 * 1024 * 1024 // 10MB
 	logBufferSize    = 32 * 1024        // 32KB
@@ -36,21 +36,21 @@ type Logger struct {
 var (
 	globalLogger  *Logger
 	loggerOnce   sync.Once
-	loggerBuffer = make(chan string, 1000) // Буферизованный канал для логов
+	loggerBuffer = make(chan string, 1000) // Buffered channel for logs
 )
 
 func init() {
-	go processLogs() // Запускаем горутину для обработки логов
+	go processLogs() // Start goroutine for log processing
 }
 
-// processLogs обрабатывает логи асинхронно
+// processLogs processes logs asynchronously
 func processLogs() {
 	for msg := range loggerBuffer {
 		if l := getLogger(); l != nil && !l.disabled {
 			l.mu.Lock()
 			if l.writer != nil {
 				l.writer.WriteString(msg)
-				// Периодически сбрасываем буфер
+				// Periodically flush the buffer
 				if len(loggerBuffer) == 0 {
 					l.writer.Flush()
 				}
@@ -81,7 +81,7 @@ func initLogger() {
 	}
 
 	logPath := filepath.Join(logDir, "search.log")
-	rotateLogFile(logPath) // Ротация логов при инициализации
+	rotateLogFile(logPath) // Rotate logs on initialization
 
 	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -123,7 +123,7 @@ func logDebug(format string, args ...interface{}) {
 		select {
 		case loggerBuffer <- msg:
 		default:
-			// Если буфер полон, пропускаем сообщение
+			// If buffer is full, skip message
 		}
 	}
 }
@@ -135,7 +135,7 @@ func logInfo(format string, args ...interface{}) {
 		select {
 		case loggerBuffer <- msg:
 		default:
-			// Если буфер полон, пропускаем сообщение
+			// If buffer is full, skip message
 		}
 	}
 }
@@ -144,7 +144,7 @@ func logInfo(format string, args ...interface{}) {
 func logError(format string, args ...interface{}) {
 	if l := getLogger(); l != nil && !l.disabled {
 		msg := fmt.Sprintf("[ERROR] "+format+"\n", args...)
-		// Для ошибок используем блокирующую запись
+		// For errors, use blocking write
 		loggerBuffer <- msg
 	}
 }
@@ -173,7 +173,7 @@ func (l *Logger) Close() error {
 	return nil
 }
 
-// Экспортируемые функции
+// Exported functions
 func InitLogger() {
 	initLogger()
 }
@@ -200,7 +200,7 @@ func LogWarning(format string, args ...interface{}) {
 		select {
 		case loggerBuffer <- msg:
 		default:
-			// Если буфер полон, пропускаем сообщение
+			// If buffer is full, skip message
 		}
 	}
 }

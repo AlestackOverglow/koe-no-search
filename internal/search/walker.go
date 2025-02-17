@@ -46,9 +46,7 @@ func shouldSkipDirectory(dir string, opts SearchOptions) bool {
 	skipDirCache.paths[dir] = skip
 	skipDirCache.Unlock()
 
-	if skip {
-		logDebug("Skipping directory: %s", dir)
-	}
+	
 	return skip
 }
 
@@ -115,7 +113,7 @@ func walkDirectoryOptimized(dir string, paths chan<- string, opts SearchOptions)
 	}
 }
 
-// sendBatch отправляет пакет файлов в канал
+// sendBatch sends a batch of files to the channel
 func sendBatch(batch []string, paths chan<- string, stopChan chan struct{}) {
 	for _, path := range batch {
 		select {
@@ -137,7 +135,7 @@ func processDirectoryEntry(entry *DirEntry, paths chan<- string, opts SearchOpti
 	for _, child := range entry.children {
 		select {
 		case <-opts.StopChan:
-			logDebug("Search stopped while processing cached entries")
+			
 			return
 		default:
 			if child.entry.IsDir() {

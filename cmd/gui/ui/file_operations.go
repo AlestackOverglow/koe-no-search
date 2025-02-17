@@ -21,7 +21,7 @@ type FileOperationsPanel struct {
 	ConflictPolicy  *widget.Select
 	TargetDir       string
 	OperationBtn    *widget.Button
-	mu              sync.Mutex // Защита для foundFiles
+	mu              sync.Mutex // Mutex for foundFiles protection
 }
 
 // CreateFileOperationsPanel creates and returns file operations panel widgets

@@ -39,7 +39,7 @@ func (t *customTheme) Color(n fyne.ThemeColorName, v fyne.ThemeVariant) color.Co
 			A: 180, // Increased transparency (255 is fully opaque)
 		}
 	} else if n == theme.ColorNamePrimary {
-		// Бордовый оттенок для кнопки Start Search
+		// Burgundy tint for Start Search button
 		return color.NRGBA{
 			R: 145,
 			G: 85,
@@ -201,7 +201,7 @@ func main() {
 		bgImage := canvas.NewImageFromResource(bgResource)
 		bgImage.Resize(fyne.NewSize(800, 600))
 		bgImage.FillMode = canvas.ImageFillStretch
-		bgImage.Translucency = 0.9 // 1.0 - полностью прозрачно, 0.0 - полностью непрозрачно
+		bgImage.Translucency = 0.9 // 1.0 - fully transparent, 0.0 - fully opaque
 		
 		mainContainer = container.NewMax(
 			bgImage,
@@ -245,11 +245,10 @@ func main() {
 			RootDirs:    searchDirs,
 			Patterns:    utils.SplitCommaList(searchPanel.PatternEntry.Text),
 			Extensions:  utils.SplitCommaList(searchPanel.ExtensionEntry.Text),
-			MaxWorkers:  int(settingsPanel.WorkersSlider.Value),
+			MaxWorkers:  runtime.NumCPU(),
 			IgnoreCase:  searchPanel.IgnoreCaseCheck.Checked,
-			BufferSize:  int(settingsPanel.BufferSlider.Value),
+			BufferSize:  1000,
 			StopChan:    stopChan,
-			ExcludeDirs: settingsPanel.PriorityPanel.ExcludedDirs,
 		}
 
 		// If target directory is set, add it to excluded directories
@@ -277,15 +276,8 @@ func main() {
 		opts.UseMMap = settingsPanel.UseMMapCheck.Checked
 		
 		if opts.UseMMap {
-			if minMMapSize, err := utils.ParseSize(settingsPanel.MinMMapSizeEntry.Text); err == nil && minMMapSize > 0 {
-				opts.MinMMapSize = minMMapSize
-			} else {
-				opts.MinMMapSize = 1024 * 1024 // 1MB default
-			}
+			opts.MinMMapSize = 1024 * 1024 // 1MB default
 		}
-		
-		opts.PriorityDirs = settingsPanel.PriorityPanel.PriorityDirs
-		opts.LowPriorityDirs = settingsPanel.PriorityPanel.LowPriorityDirs
 		
 		search.LogInfo("Starting search with options: %+v", opts)
 		
@@ -355,7 +347,7 @@ func main() {
 						errors++
 						search.LogError("Error processing file %s: %v", result.Path, result.Error)
 					} else {
-						search.LogDebug("Found file: %s (Size: %d bytes)", result.Path, result.Size)
+						
 						*foundFiles = append(*foundFiles, ui.FileListItem{
 							Path: result.Path,
 							Size: result.Size,

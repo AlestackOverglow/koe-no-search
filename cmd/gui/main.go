@@ -91,7 +91,7 @@ func main() {
 	progress.Hide()
 	
 	// Create results list
-	resultsList, foundFiles := ui.CreateResultsList()
+	vlist, foundFiles := ui.CreateResultsList()
 	
 	// Create settings panel
 	settingsPanel := ui.CreateSettingsPanel(w)
@@ -190,7 +190,7 @@ func main() {
 	// Create split container
 	split := container.NewHSplit(
 		scrolledInputs,
-		container.NewScroll(resultsList),
+		container.NewScroll(vlist.AsListWidget()),
 	)
 	split.SetOffset(0.3) // Left part takes 30% of window width
 	
@@ -247,8 +247,18 @@ func main() {
 			Extensions:  utils.SplitCommaList(searchPanel.ExtensionEntry.Text),
 			MaxWorkers:  runtime.NumCPU(),
 			IgnoreCase:  searchPanel.IgnoreCaseCheck.Checked,
-			BufferSize:  1000,
+			BufferSize:  2000,  // Increased buffer size
 			StopChan:    stopChan,
+			
+			// All performance-impacting features are disabled
+			DeduplicateFiles: false,
+			FollowSymlinks:   false,
+			UseMMap:          false,
+			ExcludeHidden:    false,
+			MinSize:          0,
+			MaxSize:          0,
+			MinAge:           0,
+			MaxAge:           0,
 		}
 
 		// If target directory is set, add it to excluded directories
@@ -256,38 +266,19 @@ func main() {
 			opts.ExcludeDirs = append(opts.ExcludeDirs, fileOpPanel.TargetDir)
 		}
 		
-		// Parse and add advanced settings
-		if minSize, err := utils.ParseSize(settingsPanel.MinSizeEntry.Text); err == nil && minSize > 0 {
-			opts.MinSize = minSize
-		}
-		if maxSize, err := utils.ParseSize(settingsPanel.MaxSizeEntry.Text); err == nil && maxSize > 0 {
-			opts.MaxSize = maxSize
-		}
-		if minAge, err := utils.ParseAge(settingsPanel.MinAgeEntry.Text); err == nil && minAge > 0 {
-			opts.MinAge = minAge
-		}
-		if maxAge, err := utils.ParseAge(settingsPanel.MaxAgeEntry.Text); err == nil && maxAge > 0 {
-			opts.MaxAge = maxAge
-		}
-		
-		opts.ExcludeHidden = settingsPanel.ExcludeHiddenCheck.Checked
-		opts.FollowSymlinks = settingsPanel.FollowSymlinksCheck.Checked
-		opts.DeduplicateFiles = settingsPanel.DeduplicateCheck.Checked
-		opts.UseMMap = settingsPanel.UseMMapCheck.Checked
-		
-		if opts.UseMMap {
-			opts.MinMMapSize = 1024 * 1024 // 1MB default
-		}
-		
 		search.LogInfo("Starting search with options: %+v", opts)
 		
 		// Clear previous results
 		*foundFiles = make([]ui.FileListItem, 0)
-		resultsList.Refresh()
+		vlist.Refresh()
+		
+		// Create results buffer
+		resultsBuffer := ui.NewResultBuffer(foundFiles, vlist)
 		
 		// Create channel for results
 		count := 0
 		errors := 0
+		lastUpdate := time.Now()
 		
 		// Process results in a goroutine with panic recovery
 		go func() {
@@ -309,10 +300,8 @@ func main() {
 			results := search.Search(opts)
 			
 			// Channel for UI updates
-			updateTicker := time.NewTicker(100 * time.Millisecond)
+			updateTicker := time.NewTicker(1 * time.Second) // Increased to 1 second
 			defer updateTicker.Stop()
-			
-			needsUpdate := false
 			
 			// Process results
 			for {
@@ -320,9 +309,7 @@ func main() {
 				case result, ok := <-results:
 					if !ok {
 						// Channel closed, finish search
-						if needsUpdate {
-							resultsList.Refresh()
-						}
+						resultsBuffer.Flush() // Flush remaining items
 						searchBtn.Enable()
 						if len(*foundFiles) > 0 {
 							fileOpPanel.Enable()
@@ -347,33 +334,31 @@ func main() {
 						errors++
 						search.LogError("Error processing file %s: %v", result.Path, result.Error)
 					} else {
-						
-						*foundFiles = append(*foundFiles, ui.FileListItem{
+						resultsBuffer.Add(ui.FileListItem{
 							Path: result.Path,
 							Size: result.Size,
 						})
-						needsUpdate = true
 					}
 					
 				case <-updateTicker.C:
-					// Update UI only if there are new results
-					if needsUpdate {
-						resultsList.Refresh()
-						needsUpdate = false
+					// Force flush if enough time has passed
+					if time.Since(lastUpdate) > time.Second {
+						resultsBuffer.Flush()
+						lastUpdate = time.Now()
+						
+						// Update search time
+						duration := time.Since(startTime)
+						seconds := int(duration.Seconds())
+						milliseconds := int(duration.Milliseconds()) % 1000
+						searchTimeLabel.SetText(fmt.Sprintf("Searching... %d.%03d seconds\n(%d files found)",
+							seconds,
+							milliseconds,
+							count))
 					}
-					// Update search time
-					duration := time.Since(startTime)
-					seconds := int(duration.Seconds())
-					milliseconds := int(duration.Milliseconds()) % 1000
-					searchTimeLabel.SetText(fmt.Sprintf("Searching... %d.%03d seconds",
-						seconds,
-						milliseconds))
 					
 				case <-stopChan:
 					// Stop signal received
-					if needsUpdate {
-						resultsList.Refresh()
-					}
+					resultsBuffer.Flush()
 					searchBtn.Enable()
 					if len(*foundFiles) > 0 {
 						fileOpPanel.Enable()

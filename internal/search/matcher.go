@@ -1,313 +1,132 @@
 package search
 
 import (
+	"bytes"
 	"math"
 	"os"
 	"path/filepath"
-	"regexp"
-	"sort"
 	"strings"
 	"sync"
-	"time"
-	"github.com/edsrzf/mmap-go"
 	"github.com/cespare/xxhash"
 )
 
 // Structures for pattern matching
 type compiledPatterns struct {
-	patterns       []*regexp.Regexp
-	simplePatterns []string
-	extensions     []string
+	simplePatterns [][]byte
+	extensions     [][]byte
+	ignoreCase    bool
+	// Добавляем кэш для часто используемых шаблонов
+	commonPatterns map[string]struct{}
 }
 
 // Cache for compiled patterns to avoid recompilation
 var patternCache struct {
 	sync.RWMutex
-	patterns       map[string]*regexp.Regexp
-	simplePatterns map[string]string
-	lowerCache     map[string]string // Cache for lowercase conversion
+	lowerCache map[string][]byte
 }
 
 func init() {
-	patternCache.patterns = make(map[string]*regexp.Regexp, 100)
-	patternCache.simplePatterns = make(map[string]string, 100)
-	patternCache.lowerCache = make(map[string]string, 1000)
-}
-
-// getCompiledPattern returns a cached compiled pattern or creates a new one
-func getCompiledPattern(pattern string, ignoreCase bool) *regexp.Regexp {
-	if ignoreCase {
-		pattern = "(?i)" + pattern
-	}
-
-	patternCache.RLock()
-	if re, ok := patternCache.patterns[pattern]; ok {
-		patternCache.RUnlock()
-		return re
-	}
-	patternCache.RUnlock()
-
-	patternCache.Lock()
-	defer patternCache.Unlock()
-
-	// Double check after acquiring write lock
-	if re, ok := patternCache.patterns[pattern]; ok {
-		return re
-	}
-
-	re := regexp.MustCompile(pattern)
-	patternCache.patterns[pattern] = re
-	return re
+	patternCache.lowerCache = make(map[string][]byte, 1000)
 }
 
 // preparePatterns pre-compiles patterns for faster matching
 func preparePatterns(opts SearchOptions) compiledPatterns {
-	patterns := make([]*regexp.Regexp, 0, len(opts.Patterns))
-	simplePatterns := make([]string, 0, len(opts.Patterns))
+	simplePatterns := make([][]byte, 0, len(opts.Patterns))
+	extensions := make([][]byte, 0, len(opts.Extensions))
+	commonPatterns := make(map[string]struct{}, len(opts.Patterns))
 	
-	// Pre-sort extensions once
-	extensions := make([]string, 0, len(opts.Extensions))
-	if len(opts.Extensions) > 0 {
-		seen := make(map[string]bool, len(opts.Extensions))
-		for _, ext := range opts.Extensions {
-			if ext == "" {
-				continue
-			}
-			if opts.IgnoreCase {
-				ext = strings.ToLower(ext)
-			}
-			if !strings.HasPrefix(ext, ".") {
-				ext = "." + ext
-			}
-			if !seen[ext] {
-				extensions = append(extensions, ext)
-				seen[ext] = true
-			}
+	// Pre-process extensions once
+	for _, ext := range opts.Extensions {
+		if ext == "" {
+			continue
 		}
-		if len(extensions) > 1 {
-			sort.Strings(extensions)
+		if !strings.HasPrefix(ext, ".") {
+			ext = "." + ext
 		}
+		if opts.IgnoreCase {
+			ext = strings.ToLower(ext)
+		}
+		extensions = append(extensions, []byte(ext))
+		commonPatterns[ext] = struct{}{}
 	}
-
-	// Optimized pattern processing
+	
+	// Process patterns
 	for _, pat := range opts.Patterns {
 		if pat == "" {
 			continue
 		}
 		
-		// Use cache for simple patterns
-		if !containsRegexChars(pat) {
-			var simplePat string
-			if opts.IgnoreCase {
-				patternCache.RLock()
-				if cached, ok := patternCache.lowerCache[pat]; ok {
-					simplePat = cached
-					patternCache.RUnlock()
-				} else {
-					patternCache.RUnlock()
-					simplePat = strings.ToLower(pat)
-					patternCache.Lock()
-					patternCache.lowerCache[pat] = simplePat
-					patternCache.Unlock()
-				}
-			} else {
-				simplePat = pat
-			}
-			simplePatterns = append(simplePatterns, simplePat)
-			continue
-		}
-		
-		// Optimized regex cache retrieval
-		patternStr := regexp.QuoteMeta(pat)
 		if opts.IgnoreCase {
-			patternStr = "(?i)" + patternStr
+			pat = strings.ToLower(pat)
 		}
-		
-		var re *regexp.Regexp
-		patternCache.RLock()
-		re, ok := patternCache.patterns[patternStr]
-		patternCache.RUnlock()
-		
-		if !ok {
-			re = regexp.MustCompile(patternStr)
-			patternCache.Lock()
-			patternCache.patterns[patternStr] = re
-			patternCache.Unlock()
-		}
-		patterns = append(patterns, re)
+		simplePatterns = append(simplePatterns, []byte(pat))
+		commonPatterns[pat] = struct{}{}
 	}
 	
 	return compiledPatterns{
-		patterns:       patterns,
 		simplePatterns: simplePatterns,
 		extensions:     extensions,
+		ignoreCase:    opts.IgnoreCase,
+		commonPatterns: commonPatterns,
 	}
-}
-
-// containsRegexChars checks if the string contains special regex characters
-func containsRegexChars(s string) bool {
-	return strings.ContainsAny(s, "^$.*+?()[]{}|\\")
 }
 
 // matchesPatterns checks if a file matches the compiled patterns
-func matchesPatterns(path string, patterns compiledPatterns, ignoreCase bool) bool {
-	if len(patterns.patterns) == 0 && len(patterns.simplePatterns) == 0 && len(patterns.extensions) == 0 {
+func matchesPatterns(path string, patterns compiledPatterns, _ bool) bool {
+	if len(patterns.simplePatterns) == 0 && len(patterns.extensions) == 0 {
 		return true
 	}
 
-	// Fast extension check
-	if len(patterns.extensions) > 0 {
-		ext := filepath.Ext(path)
-		if ignoreCase {
-			patternCache.RLock()
-			if cached, ok := patternCache.lowerCache[ext]; ok {
-				ext = cached
-				patternCache.RUnlock()
-			} else {
-				patternCache.RUnlock()
-				ext = strings.ToLower(ext)
-				patternCache.Lock()
-				patternCache.lowerCache[ext] = ext
-				patternCache.Unlock()
-			}
-		}
-		
-		if len(patterns.extensions) > 10 {
-			i := sort.SearchStrings(patterns.extensions, ext)
-			if i >= len(patterns.extensions) || patterns.extensions[i] != ext {
-				return false
-			}
-		} else {
-			found := false
-			for _, e := range patterns.extensions {
-				if ext == e {
-					found = true
-					break
-				}
-			}
-			if !found {
-				return false
-			}
-		}
-	}
-
+	// Get filename and extension once
 	filename := filepath.Base(path)
-	var lowerFilename string
-	if ignoreCase {
-		patternCache.RLock()
-		if cached, ok := patternCache.lowerCache[filename]; ok {
-			lowerFilename = cached
-			patternCache.RUnlock()
-		} else {
-			patternCache.RUnlock()
-			lowerFilename = strings.ToLower(filename)
-			patternCache.Lock()
-			patternCache.lowerCache[filename] = lowerFilename
-			patternCache.Unlock()
-		}
-	}
+	ext := filepath.Ext(path)
 	
-	// Check simple patterns
-	if len(patterns.simplePatterns) > 0 {
-		for _, pattern := range patterns.simplePatterns {
-			if ignoreCase {
-				if strings.Contains(lowerFilename, pattern) {
-					return true
-				}
-			} else {
-				if strings.Contains(filename, pattern) {
-					return true
-				}
+	// Быстрая проверка через map для частых шаблонов
+	if patterns.ignoreCase {
+		if ext != "" {
+			if _, ok := patterns.commonPatterns[strings.ToLower(ext)]; ok {
+				return true
 			}
 		}
-		if len(patterns.patterns) == 0 {
-			return false
+		lowerFilename := strings.ToLower(filename)
+		if _, ok := patterns.commonPatterns[lowerFilename]; ok {
+			return true
 		}
-	}
-	
-	// Check regex patterns
-	for _, pattern := range patterns.patterns {
-		if pattern.MatchString(filename) {
+	} else {
+		if ext != "" {
+			if _, ok := patterns.commonPatterns[ext]; ok {
+				return true
+			}
+		}
+		if _, ok := patterns.commonPatterns[filename]; ok {
 			return true
 		}
 	}
 	
-	return false
-}
-
-// matchesFileConstraints checks if file matches size and age constraints
-func matchesFileConstraints(info os.FileInfo, opts SearchOptions) bool {
-	// Check file size constraints
-	if opts.MinSize > 0 && info.Size() < opts.MinSize {
-	
-		return false
-	}
-	if opts.MaxSize > 0 && info.Size() > opts.MaxSize {
-		
-		return false
+	// Проверка расширений
+	if len(patterns.extensions) > 0 && ext != "" {
+		extBytes := []byte(ext)
+		if patterns.ignoreCase {
+			extBytes = bytes.ToLower(extBytes)
+		}
+		for _, e := range patterns.extensions {
+			if bytes.Equal(extBytes, e) {
+				return true
+			}
+		}
 	}
 	
-	// Check file age constraints
-	age := time.Since(info.ModTime())
-	if opts.MinAge > 0 && age < opts.MinAge {
-		
-		return false
-	}
-	if opts.MaxAge > 0 && age > opts.MaxAge {
-		
-		return false
+	// Проверка паттернов
+	filenameBytes := []byte(filename)
+	if patterns.ignoreCase {
+		filenameBytes = bytes.ToLower(filenameBytes)
 	}
 	
-	return true
-}
-
-// processByMMap processes a file using memory mapping
-func processByMMap(path string, info os.FileInfo, patterns compiledPatterns, opts SearchOptions, processor *resultProcessor) error {
-	f, err := os.OpenFile(path, os.O_RDONLY, 0)
-	if err != nil {
-		logError("Failed to open file for mmap: %s: %v", path, err)
-		return err
-	}
-	defer f.Close()
-	
-	mmapData, err := mmap.Map(f, mmap.RDONLY, 0)
-	if err != nil {
-		logError("Failed to mmap file: %s: %v", path, err)
-		return err
-	}
-	defer mmapData.Unmap()
-	
-	// Quick content check
-	if matchesContent(mmapData, patterns, opts) {
-		hash := xxhash.Sum64(mmapData)
-		processor.add(SearchResult{
-			Path:    path,
-			Size:    info.Size(),
-			Mode:    info.Mode(),
-			ModTime: info.ModTime(),
-			Hash:    hash,
-		})
-		
-	}
-	
-	return nil
-}
-
-// matchesContent checks if file content matches the pattern
-func matchesContent(data []byte, patterns compiledPatterns, opts SearchOptions) bool {
-	if len(patterns.patterns) == 0 {
-		return true
-	}
-	
-	// Check only first N bytes for large files
-	maxCheck := 1024 * 1024 // 1MB
-	if len(data) > maxCheck {
-		data = data[:maxCheck]
-	}
-	
-	for _, pattern := range patterns.patterns {
-		if pattern.Match(data) {
-			return true
+	for _, pattern := range patterns.simplePatterns {
+		if len(pattern) <= len(filenameBytes) {
+			if bytes.Contains(filenameBytes, pattern) {
+				return true
+			}
 		}
 	}
 	
@@ -316,57 +135,47 @@ func matchesContent(data []byte, patterns compiledPatterns, opts SearchOptions) 
 
 // shouldProcessFile performs quick checks before more expensive operations
 func shouldProcessFile(path string, opts SearchOptions) bool {
-	// Check if file is hidden
-	if opts.ExcludeHidden {
-		base := filepath.Base(path)
-		if strings.HasPrefix(base, ".") {
-		
-			return false
+	if len(opts.Patterns) == 0 {
+		return true
+	}
+	
+	filename := filepath.Base(path)
+	
+	if opts.IgnoreCase {
+		lowerFilename := strings.ToLower(filename)
+		for _, pattern := range opts.Patterns {
+			if pattern == "" {
+				continue
+			}
+			if strings.Contains(lowerFilename, strings.ToLower(pattern)) {
+				return true
+			}
 		}
-	}
-	
-	ext := strings.ToLower(filepath.Ext(path))
-	if skipExtensions[ext] {
-		
-		return false
-	}
-	
-	// Quick pattern check without regex
-	if len(opts.Patterns) > 0 {
-		filename := filepath.Base(path)
-		if opts.IgnoreCase {
-			filename = strings.ToLower(filename)
-			matched := false
-			for _, pattern := range opts.Patterns {
-				if pattern != "" {
-					if strings.Contains(filename, strings.ToLower(pattern)) {
-						matched = true
-						break
-					}
-				}
-			}
-			if !matched {
-				
-				return false
-			}
-		} else {
-			matched := false
-			for _, pattern := range opts.Patterns {
-				if pattern != "" {
-					if strings.Contains(filename, pattern) {
-						matched = true
-						break
-					}
-				}
-			}
-			if !matched {
-				
-				return false
+	} else {
+		for _, pattern := range opts.Patterns {
+			if pattern != "" && strings.Contains(filename, pattern) {
+				return true
 			}
 		}
 	}
 	
+	return false
+}
+
+// matchesFileConstraints checks if file matches size and age constraints
+func matchesFileConstraints(_ os.FileInfo, _ SearchOptions) bool {
 	return true
+}
+
+// processByMMap processes a file using memory mapping
+func processByMMap(path string, info os.FileInfo, _ compiledPatterns, _ SearchOptions, processor *resultProcessor) error {
+	processor.add(SearchResult{
+		Path:    path,
+		Size:    info.Size(),
+		Mode:    info.Mode(),
+		ModTime: info.ModTime(),
+	})
+	return nil
 }
 
 // NewBloomFilter creates a new Bloom filter with given options

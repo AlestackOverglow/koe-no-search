@@ -5,4 +5,7 @@ import (
 )
 
 //go:embed assets/icon.png
-var IconData []byte 
+var IconData []byte
+
+//go:embed assets/background.png
+var BackgroundData []byte 

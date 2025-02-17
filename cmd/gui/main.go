@@ -5,103 +5,61 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	
+	"filesearch/cmd/gui/explorer"
+	"filesearch/cmd/gui/ui"
+	"filesearch/cmd/gui/utils"
 	"filesearch/internal/search"
+	"fyne.io/fyne/v2/theme"
+	"image/color"
 )
 
-// FileListItem represents an item in the file list
-type FileListItem struct {
-	Path string
-	Size int64
+// customTheme wraps the default theme to add button transparency
+type customTheme struct {
+	base fyne.Theme
 }
 
-// ShowInExplorer opens the file location in explorer
-func ShowInExplorer(path string) {
-	path = filepath.Clean(path)
-	
-	// Validate path
-	if _, err := os.Stat(path); err != nil {
-		search.LogError("File no longer exists or inaccessible: %v", err)
-		dialog.ShowError(fmt.Errorf("File no longer exists or inaccessible: %v", err), nil)
-		return
-	}
-
-	// Get absolute path
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		search.LogError("Failed to get absolute path: %v", err)
-		dialog.ShowError(fmt.Errorf("Failed to get file path: %v", err), nil)
-		return
-	}
-
-	// Check if path is accessible
-	if _, err := os.Stat(absPath); err != nil {
-		search.LogError("Path is not accessible: %v", err)
-		dialog.ShowError(fmt.Errorf("Path is not accessible: %v", err), nil)
-		return
-	}
-
-	switch runtime.GOOS {
-	case "windows":
-		// Convert path to Windows format
-		absPath = strings.ReplaceAll(absPath, "/", "\\")
-		
-		// Use shell command to open explorer
-		cmdPath := os.Getenv("COMSPEC")
-		if cmdPath == "" {
-			cmdPath = `C:\Windows\System32\cmd.exe`
+func (t *customTheme) Color(n fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
+	c := t.base.Color(n, v)
+	if n == theme.ColorNameButton {
+		r, g, b, _ := c.RGBA()
+		return color.NRGBA{
+			R: uint8(r >> 8),
+			G: uint8(g >> 8),
+			B: uint8(b >> 8),
+			A: 180, // Increased transparency (255 is fully opaque)
 		}
-		
-		// Use /c to close cmd after execution and start to run explorer asynchronously
-		cmd := exec.Command(cmdPath, "/c", "start", "explorer.exe", "/select,", absPath)
-		if err := cmd.Run(); err != nil {
-			search.LogError("Failed to open in explorer: %v", err)
-			dialog.ShowError(fmt.Errorf("Failed to open in explorer: %v", err), nil)
-		}
-		
-	case "darwin":
-		cmd := exec.Command("open", "-R", absPath)
-		if err := cmd.Run(); err != nil {
-			search.LogError("Failed to open in Finder: %v", err)
-			dialog.ShowError(fmt.Errorf("Failed to open in Finder: %v", err), nil)
-		}
-		
-	default: // Linux and other Unix-like systems
-		dirPath := filepath.Dir(absPath)
-		cmd := exec.Command("xdg-open", dirPath)
-		if err := cmd.Run(); err != nil {
-			search.LogError("Failed to open in file manager: %v", err)
-			dialog.ShowError(fmt.Errorf("Failed to open in file manager: %v", err), nil)
+	} else if n == theme.ColorNamePrimary {
+		// Бордовый оттенок для кнопки Start Search
+		return color.NRGBA{
+			R: 145,
+			G: 85,
+			B: 95,
+			A: 255,
 		}
 	}
+	return c
 }
 
-// getAllDrives returns a list of all available drives in Windows/Linux
-func getAllDrives() []string {
-	if runtime.GOOS == "windows" {
-		drives := []string{}
-		for _, drive := range "ABCDEFGHIJKLMNOPQRSTUVWXYZ" {
-			drivePath := string(drive) + ":\\"
-			_, err := os.Stat(drivePath)
-			if err == nil {
-				drives = append(drives, drivePath)
-			}
-		}
-		return drives
-	} else {
-		// For Linux return root directory
-		return []string{"/"}
-	}
+func (t *customTheme) Icon(n fyne.ThemeIconName) fyne.Resource {
+	return t.base.Icon(n)
+}
+
+func (t *customTheme) Font(s fyne.TextStyle) fyne.Resource {
+	return t.base.Font(s)
+}
+
+func (t *customTheme) Size(n fyne.ThemeSizeName) float32 {
+	return t.base.Size(n)
 }
 
 func main() {
@@ -111,6 +69,12 @@ func main() {
 	
 	a := app.New()
 
+	// Set application theme with slightly transparent buttons
+	theme := a.Settings().Theme()
+	a.Settings().SetTheme(&customTheme{
+		base: theme,
+	})
+
 	// Set application icon
 	if len(search.IconData) > 0 {
 		iconResource := fyne.NewStaticResource("icon.png", search.IconData)
@@ -119,183 +83,26 @@ func main() {
 
 	w := a.NewWindow(fmt.Sprintf("Koe no Search v%s", search.Version))
 	
-	// Create input fields
-	patternEntry := widget.NewEntry()
-	patternEntry.SetPlaceHolder("Search patterns (comma-separated, e.g.: *.txt, *.doc)")
-	
-	extensionEntry := widget.NewEntry()
-	extensionEntry.SetPlaceHolder("File extensions (comma-separated, e.g.: txt, doc)")
-	
-	// Helper function to split comma-separated values
-	splitCommaList := func(s string) []string {
-		if s == "" {
-			return nil
-		}
-		parts := strings.Split(s, ",")
-		result := make([]string, 0, len(parts))
-		for _, p := range parts {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				result = append(result, p)
-			}
-		}
-		return result
-	}
-	
-	ignoreCaseCheck := widget.NewCheck("Ignore case", nil)
-	
-	workersSlider := widget.NewSlider(1, float64(runtime.NumCPU()*2))
-	workersSlider.SetValue(float64(runtime.NumCPU()))
-	
-	workersLabel := widget.NewLabel(fmt.Sprintf("Workers: %d", runtime.NumCPU()))
-	workersSlider.OnChanged = func(v float64) {
-		workersLabel.SetText(fmt.Sprintf("Workers: %d", int(v)))
-	}
-	
-	bufferSlider := widget.NewSlider(100, 10000)
-	bufferSlider.SetValue(1000)
-	
-	bufferLabel := widget.NewLabel("Buffer size: 1000")
-	bufferSlider.OnChanged = func(v float64) {
-		bufferLabel.SetText(fmt.Sprintf("Buffer size: %d", int(v)))
-	}
+	// Create search panel
+	searchPanel := ui.CreateSearchPanel(w)
 	
 	// Create progress bar
 	progress := widget.NewProgressBarInfinite()
 	progress.Hide()
 	
-	// Create list for selected directories
-	selectedDirs := make([]string, 0)
-	dirsLabel := widget.NewLabel("")
-	dirsLabel.Wrapping = fyne.TextWrapWord
-	updateDirsLabel := func() {
-		if len(selectedDirs) == 0 {
-			dirsLabel.SetText("No directories selected\n(will search everywhere)")
-		} else {
-			dirsLabel.SetText("Selected directories:\n" + strings.Join(selectedDirs, "\n"))
-		}
-	}
-	updateDirsLabel()
+	// Create results list
+	resultsList, foundFiles := ui.CreateResultsList()
 	
-	// Create list for results
-	var foundFiles []FileListItem
-	resultsList := widget.NewList(
-		func() int {
-			return len(foundFiles)
-		},
-		func() fyne.CanvasObject {
-			return widget.NewLabel("Template Text That Is Long Enough")
-		},
-		func(i widget.ListItemID, o fyne.CanvasObject) {
-			file := foundFiles[i]
-			label := o.(*widget.Label)
-			
-			// Format file size
-			var sizeStr string
-			switch {
-			case file.Size >= 1024*1024*1024:
-				sizeStr = fmt.Sprintf("%.2f GB", float64(file.Size)/(1024*1024*1024))
-			case file.Size >= 1024*1024:
-				sizeStr = fmt.Sprintf("%.2f MB", float64(file.Size)/(1024*1024))
-			case file.Size >= 1024:
-				sizeStr = fmt.Sprintf("%.2f KB", float64(file.Size)/1024)
-			default:
-				sizeStr = fmt.Sprintf("%d B", file.Size)
-			}
-			
-			label.SetText(fmt.Sprintf("%s (%s)", file.Path, sizeStr))
-		},
-	)
+	// Create settings panel
+	settingsPanel := ui.CreateSettingsPanel(w)
 	
-	// Add double-click handler
-	resultsList.OnSelected = func(id widget.ListItemID) {
-		if id < len(foundFiles) {
-			go ShowInExplorer(foundFiles[id].Path)
-		}
-		resultsList.UnselectAll()
-	}
+	// Create file operations panel
+	fileOpPanel := ui.CreateFileOperationsPanel(w, foundFiles)
 	
-	// Create directory selection button
-	addDirBtn := widget.NewButton("Add Directory", func() {
-		d := dialog.NewFolderOpen(func(uri fyne.ListableURI, err error) {
-			if err != nil {
-				search.LogError("Failed to open directory: %v", err)
-				dialog.ShowError(err, w)
-				return
-			}
-			if uri == nil {
-				search.LogWarning("No directory selected")
-				return
-			}
-			selectedDirs = append(selectedDirs, uri.Path())
-			search.LogInfo("Added directory: %s", uri.Path())
-			updateDirsLabel()
-		}, w)
-		d.Resize(fyne.NewSize(500, 400))
-		d.Show()
-	})
-	
-	// Create clear directories button
-	clearDirsBtn := widget.NewButton("Clear Directories", func() {
-		selectedDirs = make([]string, 0)
-		updateDirsLabel()
-	})
-	
-	// File operations section
-	opTypeSelect := widget.NewSelect([]string{
-		"No Operation",
-		"Copy Files",
-		"Move Files",
-		"Delete Files",
-	}, nil)
-	opTypeSelect.SetSelected("No Operation")
-
-	// Target directory selection
-	var targetDir string
-	targetDirLabel := widget.NewLabel("Target Directory: Not selected")
-	targetDirLabel.Wrapping = fyne.TextWrapWord
-
-	selectTargetBtn := widget.NewButton("Select Target Directory", func() {
-		d := dialog.NewFolderOpen(func(uri fyne.ListableURI, err error) {
-			if err != nil {
-				dialog.ShowError(err, w)
-				return
-			}
-			if uri != nil {
-				targetDir = uri.Path()
-				targetDirLabel.SetText("Target Directory: " + targetDir)
-			}
-		}, w)
-		d.Resize(fyne.NewSize(500, 400))
-		d.Show()
-	})
-
-	// Conflict resolution policy
-	conflictPolicy := widget.NewSelect([]string{
-		"Skip",
-		"Overwrite",
-		"Rename",
-	}, nil)
-	conflictPolicy.SetSelected("Skip")
-
-	fileOpContent := container.NewVBox(
-		widget.NewLabel("Operation:"),
-		opTypeSelect,
-		widget.NewSeparator(),
-		targetDirLabel,
-		selectTargetBtn,
-		widget.NewSeparator(),
-		widget.NewLabel("On File Conflict:"),
-		conflictPolicy,
-	)
-
-	fileOpAccordion := widget.NewAccordion(
-		widget.NewAccordionItem("File Operations", fileOpContent),
-	)
-	fileOpAccordion.Close(0) // Close the first (and only) item
-	
-	// Create search button
+	// Create search button and add it to search panel
 	searchBtn := widget.NewButton("Start Search", nil)
+	searchBtn.Importance = widget.HighImportance
+	searchPanel.AddSearchButton(searchBtn)
 	
 	// Add label for search time
 	searchTimeLabel := widget.NewLabel("")
@@ -303,83 +110,6 @@ func main() {
 	// Channel for stop signal
 	var stopChan chan struct{}
 	
-	// Create file operations button
-	fileOpBtn := widget.NewButton("Apply Operation", func() {
-		if len(foundFiles) == 0 {
-			dialog.ShowError(fmt.Errorf("No files found to process"), w)
-			return
-		}
-
-		// Validate file operations
-		var fileOp search.FileOperationOptions
-		switch opTypeSelect.Selected {
-		case "Copy Files":
-			fileOp.Operation = search.CopyFiles
-		case "Move Files":
-			fileOp.Operation = search.MoveFiles
-		case "Delete Files":
-			fileOp.Operation = search.DeleteFiles
-		default:
-			dialog.ShowError(fmt.Errorf("Please select an operation"), w)
-			return
-		}
-
-		if fileOp.Operation != search.NoOperation && fileOp.Operation != search.DeleteFiles {
-			if targetDir == "" {
-				dialog.ShowError(fmt.Errorf("Please select target directory"), w)
-				return
-			}
-		}
-
-		fileOp.TargetDir = targetDir
-
-		switch conflictPolicy.Selected {
-		case "Skip":
-			fileOp.ConflictPolicy = search.Skip
-		case "Overwrite":
-			fileOp.ConflictPolicy = search.Overwrite
-		case "Rename":
-			fileOp.ConflictPolicy = search.Rename
-		}
-
-		// Create progress dialog
-		progress := dialog.NewProgress("Processing Files", "Processing files...", w)
-		progress.Show()
-
-		// Process files in a goroutine
-		go func() {
-			processor := search.NewFileOperationProcessor(runtime.NumCPU())
-			processor.Start()
-			defer processor.Stop()
-
-			total := len(foundFiles)
-			for i, file := range foundFiles {
-				// Update progress
-				progress.SetValue(float64(i) / float64(total))
-
-				// Process file
-				if err := search.HandleFileOperation(file.Path, fileOp); err != nil {
-					search.LogError("Failed to process file %s: %v", file.Path, err)
-					continue
-				}
-			}
-
-			// Close progress dialog
-			progress.Hide()
-
-			// Show completion dialog
-			dialog.ShowInformation("Operation Complete", 
-				fmt.Sprintf("Processed %d files", total), w)
-
-			// Clear results if files were moved or deleted
-			if fileOp.Operation == search.MoveFiles || fileOp.Operation == search.DeleteFiles {
-				foundFiles = make([]FileListItem, 0)
-				resultsList.Refresh()
-			}
-		}()
-	})
-	fileOpBtn.Disable() // Disabled by default
-
 	// Create stop button
 	stopBtn := widget.NewButton("Stop Search", func() {
 		if stopChan != nil {
@@ -388,15 +118,7 @@ func main() {
 			stopChan = nil
 		}
 	})
-	
-	// Create exit button
-	exitBtn := widget.NewButton("Exit", func() {
-		search.LogInfo("Application exit requested by user")
-		if stopChan != nil {
-			close(stopChan)
-		}
-		a.Quit()
-	})
+	searchPanel.AddStopButton(stopBtn)
 	
 	// Create about section
 	authorLabel := widget.NewLabel("Author: AlestackOverglow")
@@ -430,38 +152,66 @@ func main() {
 		repoLink,
 	)
 	
-	// Layout
-	dirButtons := container.NewHBox(addDirBtn, clearDirsBtn)
+	// Create advanced settings accordion
+	advancedSettingsContent := settingsPanel.GetContent()
+	advancedSettingsAccordion := widget.NewAccordion(
+		widget.NewAccordionItem("Advanced Settings", advancedSettingsContent),
+	)
+	advancedSettingsAccordion.Close(0) // Closed by default
 	
+	// Create file operations accordion
+	fileOpContent := fileOpPanel.GetContent()
+	fileOpAccordion := widget.NewAccordion(
+		widget.NewAccordionItem("File Operations", fileOpContent),
+	)
+	fileOpAccordion.Close(0) // Closed by default
+	
+	// Layout
 	inputs := container.NewVBox(
-		patternEntry,
-		extensionEntry,
-		ignoreCaseCheck,
-		workersLabel,
-		workersSlider,
-		bufferLabel,
-		bufferSlider,
-		dirButtons,
-		dirsLabel,
+		searchPanel.GetContent(),
+		widget.NewSeparator(),
+		advancedSettingsAccordion,
 		widget.NewSeparator(),
 		fileOpAccordion,
 		widget.NewSeparator(),
-		searchBtn,
 		searchTimeLabel,
-		fileOpBtn,
-		stopBtn,
+		fileOpPanel.OperationBtn,
 		progress,
-		exitBtn,
 		widget.NewSeparator(),
 		aboutBox,
 	)
 	
-	content := container.NewHSplit(
-		inputs,
+	// Wrap inputs in scroll container with minimum width
+	scrollContainer := container.NewVBox(inputs)
+	scrolledInputs := container.NewVScroll(scrollContainer)
+	minSize := fyne.NewSize(300, 0) // Minimum width 300 pixels
+	scrollContainer.Resize(minSize)
+	
+	// Create split container
+	split := container.NewHSplit(
+		scrolledInputs,
 		container.NewScroll(resultsList),
 	)
+	split.SetOffset(0.3) // Left part takes 30% of window width
 	
-	w.SetContent(content)
+	// Set background image if available
+	var mainContainer fyne.CanvasObject
+	if len(search.BackgroundData) > 0 {
+		bgResource := fyne.NewStaticResource("background.png", search.BackgroundData)
+		bgImage := canvas.NewImageFromResource(bgResource)
+		bgImage.Resize(fyne.NewSize(800, 600))
+		bgImage.FillMode = canvas.ImageFillStretch
+		bgImage.Translucency = 0.9 // 1.0 - полностью прозрачно, 0.0 - полностью непрозрачно
+		
+		mainContainer = container.NewMax(
+			bgImage,
+			split,
+		)
+	} else {
+		mainContainer = split
+	}
+	
+	w.SetContent(mainContainer)
 	w.Resize(fyne.NewSize(800, 600))
 	
 	// Set window close handler
@@ -474,15 +224,15 @@ func main() {
 		stopChan = make(chan struct{})
 		
 		// If no directories selected, use all available drives
-		searchDirs := selectedDirs
+		searchDirs := searchPanel.SelectedDirs
 		if len(searchDirs) == 0 {
-			searchDirs = getAllDrives()
+			searchDirs = explorer.GetAllDrives()
 			search.LogInfo("No directories selected, using all drives: %v", searchDirs)
 		}
 		
 		// Disable buttons and show progress
 		searchBtn.Disable()
-		fileOpBtn.Disable()
+		fileOpPanel.Disable()
 		progress.Show()
 		
 		// Reset search time label
@@ -493,24 +243,54 @@ func main() {
 		
 		opts := search.SearchOptions{
 			RootDirs:    searchDirs,
-			Patterns:    splitCommaList(patternEntry.Text),
-			Extensions:  splitCommaList(extensionEntry.Text),
-			MaxWorkers:  int(workersSlider.Value),
-			IgnoreCase:  ignoreCaseCheck.Checked,
-			BufferSize:  int(bufferSlider.Value),
+			Patterns:    utils.SplitCommaList(searchPanel.PatternEntry.Text),
+			Extensions:  utils.SplitCommaList(searchPanel.ExtensionEntry.Text),
+			MaxWorkers:  int(settingsPanel.WorkersSlider.Value),
+			IgnoreCase:  searchPanel.IgnoreCaseCheck.Checked,
+			BufferSize:  int(settingsPanel.BufferSlider.Value),
 			StopChan:    stopChan,
-			ExcludeDirs: []string{},
+			ExcludeDirs: settingsPanel.PriorityPanel.ExcludedDirs,
 		}
 
 		// If target directory is set, add it to excluded directories
-		if targetDir != "" {
-			opts.ExcludeDirs = append(opts.ExcludeDirs, targetDir)
+		if fileOpPanel.TargetDir != "" {
+			opts.ExcludeDirs = append(opts.ExcludeDirs, fileOpPanel.TargetDir)
 		}
+		
+		// Parse and add advanced settings
+		if minSize, err := utils.ParseSize(settingsPanel.MinSizeEntry.Text); err == nil && minSize > 0 {
+			opts.MinSize = minSize
+		}
+		if maxSize, err := utils.ParseSize(settingsPanel.MaxSizeEntry.Text); err == nil && maxSize > 0 {
+			opts.MaxSize = maxSize
+		}
+		if minAge, err := utils.ParseAge(settingsPanel.MinAgeEntry.Text); err == nil && minAge > 0 {
+			opts.MinAge = minAge
+		}
+		if maxAge, err := utils.ParseAge(settingsPanel.MaxAgeEntry.Text); err == nil && maxAge > 0 {
+			opts.MaxAge = maxAge
+		}
+		
+		opts.ExcludeHidden = settingsPanel.ExcludeHiddenCheck.Checked
+		opts.FollowSymlinks = settingsPanel.FollowSymlinksCheck.Checked
+		opts.DeduplicateFiles = settingsPanel.DeduplicateCheck.Checked
+		opts.UseMMap = settingsPanel.UseMMapCheck.Checked
+		
+		if opts.UseMMap {
+			if minMMapSize, err := utils.ParseSize(settingsPanel.MinMMapSizeEntry.Text); err == nil && minMMapSize > 0 {
+				opts.MinMMapSize = minMMapSize
+			} else {
+				opts.MinMMapSize = 1024 * 1024 // 1MB default
+			}
+		}
+		
+		opts.PriorityDirs = settingsPanel.PriorityPanel.PriorityDirs
+		opts.LowPriorityDirs = settingsPanel.PriorityPanel.LowPriorityDirs
 		
 		search.LogInfo("Starting search with options: %+v", opts)
 		
 		// Clear previous results
-		foundFiles = make([]FileListItem, 0)
+		*foundFiles = make([]ui.FileListItem, 0)
 		resultsList.Refresh()
 		
 		// Create channel for results
@@ -524,7 +304,7 @@ func main() {
 					search.LogError("Panic during search: %v", r)
 					// Restore interface in case of panic
 					searchBtn.Enable()
-					fileOpBtn.Disable()
+					fileOpPanel.Disable()
 					progress.Hide()
 					dialog.ShowError(fmt.Errorf("Search error: %v", r), w)
 					if stopChan != nil {
@@ -552,8 +332,8 @@ func main() {
 							resultsList.Refresh()
 						}
 						searchBtn.Enable()
-						if len(foundFiles) > 0 {
-							fileOpBtn.Enable()
+						if len(*foundFiles) > 0 {
+							fileOpPanel.Enable()
 						}
 						progress.Hide()
 						
@@ -576,7 +356,7 @@ func main() {
 						search.LogError("Error processing file %s: %v", result.Path, result.Error)
 					} else {
 						search.LogDebug("Found file: %s (Size: %d bytes)", result.Path, result.Size)
-						foundFiles = append(foundFiles, FileListItem{
+						*foundFiles = append(*foundFiles, ui.FileListItem{
 							Path: result.Path,
 							Size: result.Size,
 						})
@@ -603,8 +383,8 @@ func main() {
 						resultsList.Refresh()
 					}
 					searchBtn.Enable()
-					if len(foundFiles) > 0 {
-						fileOpBtn.Enable()
+					if len(*foundFiles) > 0 {
+						fileOpPanel.Enable()
 					}
 					progress.Hide()
 					
@@ -626,4 +406,4 @@ func main() {
 	}
 	
 	w.ShowAndRun()
-} 
+}

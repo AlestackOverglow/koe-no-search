@@ -15,24 +15,14 @@
 
 ## Table of Contents
 - [Quick Start](#quick-start)
-- [Key Features](#-key-features)
-- [Why Koe no Search?](#-why-koe-no-search)
-- [System Requirements](#-system-requirements)
-  - [Minimum Requirements](#minimum-requirements)
-  - [Recommended](#recommended)
-- [Installation](#-installation)
-  - [Prerequisites](#prerequisites)
-  - [GUI Build Requirements](#gui-build-requirements)
-  - [Building from Source](#building-from-source)
-- [Usage Examples](#-usage-examples)
-  - [GUI Interface](#gui-interface)
-  - [CLI Interface](#cli-interface)
-- [API Documentation](#-api-documentation)
-- [Technical Details](#-technical-details)
-  - [Performance Optimizations](#performance-optimizations)
-- [Contributing](#-contributing)
-- [License](#-license)
-- [Acknowledgments](#-acknowledgments)
+- [Key Features](#key-features)
+- [System Requirements](#system-requirements)
+- [Installation](#installation)
+- [Usage Examples](#usage-examples)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
 
 ## Quick Start
 
@@ -43,45 +33,18 @@
 3. Start searching!
 <img src="screenshot.png">
 
-## ✨ Key Features
+## Key Features
 
-- 🔍 Instant search without indexing
-- 🖥️ Modern, intuitive GUI
-- ⌨️ Powerful CLI interface
-- 🚄 High-performance concurrent search
-- 💻 Cross-platform support
-- 🛠️ Built-in file operations
-- 📊 Real-time progress tracking
-- ⚡ Memory-mapped file handling
-- 🎯 Pattern and extension filtering
-- 🔄 Real-time results updates
+- Instant search without indexing
+- Modern, intuitive GUI and CLI interfaces
+- High-performance concurrent search
+- Cross-platform support
+- Built-in file operations
+- Real-time progress tracking
+- Memory-mapped file handling
+- Pattern and extension filtering
 
-## 🆚 Why Koe no Search?
-
-### Comparison with Other File Search Tools
-
-| Feature                    | Koe no Search | Everything | Agent Ransack | Windows Search |
-|---------------------------|---------------|------------|---------------|----------------|
-| GUI Interface             | ✅            | ✅         | ✅            | ✅             |
-| CLI Interface             | ✅            | ❌         | ❌            | ❌             |
-| Cross-Platform           | ✅            | ❌         | ❌            | ❌             |
-| Memory-Mapped Files      | ✅            | ✅         | ❌            | ❌             |
-| Real-Time Results        | ✅            | ✅         | ✅            | ✅             |
-| File Operations          | ✅            | ❌         | ✅            | ✅             |
-| Regex Support            | ✅            | ❌         | ✅            | ❌             |
-| No Indexing Required     | ✅            | ✅         | ✅            | ❌             |
-| Open Source              | ✅            | ❌         | ❌            | ❌             |
-| Configurable Workers     | ✅            | ❌         | ❌            | ❌             |
-| Progress Tracking        | ✅            | ✅         | ✅            | ❌             |
-| Search Time Display      | ✅            | ❌         | ✅            | ❌             |
-| Search Speed (1M files)* | ~4s          | ~3s        | ~15s         | ~30s           |
-| No Admin Required        | ✅            | ❌         | ✅            | ✅             |
-| No Background Service    | ✅            | ❌         | ✅            | ❌             |
-| Portable                 | ✅            | ✅         | ❌            | ❌             |
-
-\* Search speed measured on Windows 10, Intel i5, 16GB RAM, SSD, searching through 1 million files (mixed sizes) in system directories. First search after system startup, no indexing.
-
-## 🔧 System Requirements
+## System Requirements
 
 ### Minimum Requirements
 - RAM: 256MB
@@ -95,7 +58,7 @@
 - SSD Storage
 - OS: Latest version of your platform
 
-## 📦 Installation
+## Installation
 
 ### Prerequisites
 - Go 1.21 or later
@@ -150,85 +113,29 @@
    go build -o koe-no-search-cli ./cmd/cli
    ```
 
-## 💡 Usage Examples
+## Usage Examples
 
 ### GUI Interface
-
-1. **Basic File Search**
-   - Enter pattern: `*.txt`
-   - Select directory
-   - Click "Start Search"
-
-2. **Advanced Search**
-   - Multiple patterns: `*.doc, *.docx`
-   - Enable case-sensitive search
-   - Adjust worker threads for performance
-
-3. **File Operations**
-   - Select found files
-   - Choose operation (Copy/Move/Delete)
-   - Set target directory
-   - Handle conflicts (Skip/Overwrite/Rename)
+- Enter search pattern (e.g., `*.txt`)
+- Select directory
+- Click "Start Search"
+- Use advanced options for more precise search
 
 ### CLI Interface
-
 ```bash
-# Search for text files
-koe-no-search-cli -p "*.txt" /home/user
+# Basic search
+koe-no-search-cli -p "*.txt" /path/to/search
 
-# Case-insensitive search for documents
-koe-no-search-cli -i -p "*.doc*" /work/documents
-
-# Search with multiple patterns and extensions
-koe-no-search-cli -p "report*" -e "pdf,doc,txt" /data
-
-# Advanced search with worker configuration
-koe-no-search-cli -w 8 -b 2000 -p "*.go" /src
+# Advanced search with options
+koe-no-search-cli -i -p "*.doc*" -e "pdf,doc,txt" /path/to/search
 ```
 
-## 📚 API Documentation
+## Documentation
+- [About](ABOUT_EN.md) - Detailed description and technical details
+- [API Documentation](API.md) - Integration guide for developers
+- [Future Improvements](ABOUT_EN.md#future-improvements) - Planned features
 
-For developers who want to integrate Koe no Search into their applications, we provide a comprehensive API. See our [API Documentation](API.md) for detailed information about:
-
-- Core Types and Structures
-- Search Functions
-- File Operations
-- Performance Optimization
-- Best Practices
-- Error Handling
-
-## 📖 About
-
-For more information about the project, see the [About](ABOUT_EN.md) file.
-
-## 🛠️ Technical Details
-
-### Performance Optimizations
-
-1. **Concurrent Processing**
-   - Multiple worker goroutines
-   - Batch processing
-   - Configurable thread count
-
-2. **Memory Management**
-   - Memory pooling
-   - Memory-mapped files
-   - Buffer reuse
-   - Optimized GC
-
-3. **File System Optimizations**
-   - Directory caching
-   - Smart walking
-   - Early filtering
-   - Symlink handling
-
-4. **Search Optimizations**
-   - Quick pattern matching
-   - Compiled regex
-   - Case-folding optimization
-   - Priority processing
-
-## 🤝 Contributing
+## Contributing
 
 1. Keep Koe in app (that anime girl)
 2. Fork the repository
@@ -237,15 +144,15 @@ For more information about the project, see the [About](ABOUT_EN.md) file.
 5. Push to branch (`git push origin feature/amazing-feature`)
 6. Open Pull Request
 
-Check out the [Future Improvements](ABOUT_EN.md#future-improvements) section in our documentation for a list of planned features and enhancements. Feel free to pick any of these improvements to implement - your contributions are welcome!
+Check out the [Future Improvements](ABOUT_EN.md#future-improvements) section for planned features.
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Fyne](https://fyne.io/) - GUI toolkit
 - [xxHash](https://github.com/cespare/xxhash) - Fast hashing
 - [mmap-go](https://github.com/edsrzf/mmap-go) - Memory mapping
-- [cobra](https://github.com/spf13/cobra) - CLI interface 
+- [cobra](https://github.com/spf13/cobra) - CLI interface

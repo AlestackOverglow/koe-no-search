@@ -73,7 +73,7 @@
 | Configurable Workers     | ✅            | ❌         | ❌            | ❌             |
 | Progress Tracking        | ✅            | ✅         | ✅            | ❌             |
 | Search Time Display      | ✅            | ❌         | ✅            | ❌             |
-| Search Speed (1M files)* | ~5s          | ~3s        | ~15s         | ~30s           |
+| Search Speed (1M files)* | ~4s          | ~3s        | ~15s         | ~30s           |
 | No Admin Required        | ✅            | ❌         | ✅            | ✅             |
 | No Background Service    | ✅            | ❌         | ✅            | ❌             |
 | Portable                 | ✅            | ✅         | ❌            | ❌             |

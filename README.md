@@ -31,7 +31,7 @@
    - GUI version: `koe-no-search-gui`
    - CLI version: `koe-no-search-cli -p "*.txt" /path/to/search`
 3. Start searching!
-<img src="screenshot.png">
+<img src="screenshot.png" width="401" height="314">
 
 ## Key Features
 
@@ -60,58 +60,43 @@
 
 ## Installation
 
-### Prerequisites
+### Build Requirements
 - Go 1.21 or later
-- For development: Git
-
-#### GUI Build Requirements
-- **Windows**:
-  - GCC (MinGW-w64) or TDM-GCC
-  - Required DLLs: libgcc, libstdc++, libwinpthread
-  - pkg-config (optional, for custom builds)
-
-- **Linux**:
-  - X11 and XCB development libraries
+- Git (for development)
+- GCC compiler
+- Platform-specific GUI dependencies:
   ```bash
+  # Windows: MinGW-w64/TDM-GCC (with libgcc, libstdc++, libwinpthread)
+  
   # Ubuntu/Debian
   sudo apt-get install gcc libgl1-mesa-dev xorg-dev
   
   # Fedora
   sudo dnf install gcc libXcursor-devel libXrandr-devel mesa-libGL-devel libXi-devel libXinerama-devel libXxf86vm-devel
-  ```
-
-- **macOS**:
-  - Xcode Command Line Tools
-  - pkg-config (via Homebrew)
-  ```bash
+  
+  # macOS
   xcode-select --install
   brew install pkg-config
   ```
 
 ### Building from Source
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/AlestackOverglow/koe-no-search.git
-   cd koe-no-search
-   ```
+1. Clone and prepare:
+```bash
+git clone https://github.com/AlestackOverglow/koe-no-search.git
+cd koe-no-search
+go mod download
+```
 
-2. Install dependencies:
-   ```bash
-   go mod download
-   ```
+2. Build the project:
+```bash
+# GUI version
+go build -o koe-no-search-gui ./cmd/gui     # Linux/macOS
+go build -ldflags "-H windowsgui" -o koe-no-search-gui.exe ./cmd/gui  # Windows
 
-3. Build:
-   ```bash
-   # GUI version (Windows)
-   go build -ldflags "-H windowsgui" -o koe-no-search-gui.exe ./cmd/gui
-
-   # GUI version (Linux/macOS)
-   go build -o koe-no-search-gui ./cmd/gui
-
-   # CLI version
-   go build -o koe-no-search-cli ./cmd/cli
-   ```
+# CLI version (all platforms)
+go build -o koe-no-search-cli ./cmd/cli
+```
 
 ## Usage Examples
 
@@ -144,7 +129,7 @@ koe-no-search-cli -i -p "*.doc*" -e "pdf,doc,txt" /path/to/search
 5. Push to branch (`git push origin feature/amazing-feature`)
 6. Open Pull Request
 
-Check out the [Future Improvements](ABOUT_EN.md#future-improvements) section for planned features.
+Check out the [Future Improvements](ABOUT_EN.md#future-improvements) section in our documentation for a list of planned features and enhancements. Feel free to pick any of these improvements to implement - your contributions are welcome!
 
 ## License
 

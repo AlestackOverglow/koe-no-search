@@ -6,6 +6,8 @@
 <div align="center">
 
 > 🔍 Lightning-fast file search utility with modern GUI and CLI interfaces, designed for efficiency and ease of use.
+> 
+> If you find this project helpful, please consider giving it a star ⭐ It helps others discover the project and motivates further development.
 
 [![Go Version](https://img.shields.io/badge/Go-1.21%2B-blue.svg)](https://golang.org/dl/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
